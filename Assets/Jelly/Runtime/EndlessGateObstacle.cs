@@ -22,8 +22,16 @@ namespace Jelly
 
         public void ShatterBreakablePiece()
         {
-            if (breakableCenterPiece == null) return;
-            breakableCenterPiece.gameObject.SetActive(false);
+            if (breakableCenterPiece != null)
+            {
+                breakableCenterPiece.gameObject.SetActive(false);
+                return;
+            }
+            // Fade/disable obstacle wall blocks so player never gets physically or visually stuck
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                transform.GetChild(i).gameObject.SetActive(false);
+            }
         }
     }
 }

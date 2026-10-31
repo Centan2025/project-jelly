@@ -278,6 +278,24 @@ namespace Jelly
 
             float maxOffset = IsSplit ? maxLateralOffset - 0.85f : maxLateralOffset;
             float nextOffset = CurrentLateralOffset + (_smoothedSteerInput * lateralSteerSpeed * dt) + dragDeltaOffset;
+
+            // Gentle magnetic funnel assist when approaching TwinSplitTunnels while split
+            if (IsSplit)
+            {
+                for (int i = 0; i < _activeObstacles.Count; i++)
+                {
+                    var o = _activeObstacles[i];
+                    if (o != null && !o.resolved && o.obstacleType == EndlessObstacleType.TwinSplitTunnels)
+                    {
+                        float distToGate = o.trackZ - CurrentDistance;
+                        if (distToGate > 0f && distToGate < 8f && Mathf.Abs(nextOffset) < 1.55f)
+                        {
+                            nextOffset = Mathf.MoveTowards(nextOffset, 0f, dt * 2.8f);
+                        }
+                    }
+                }
+            }
+
             CurrentLateralOffset = Mathf.Clamp(nextOffset, -maxOffset, maxOffset);
 
             // 2. Advance along the winding road
@@ -496,12 +514,26 @@ namespace Jelly
 
         private void EvaluateObstaclePassage(EndlessGateObstacle obs)
         {
+            float leftPieceX = CurrentLateralOffset - 1.32f;
+            float rightPieceX = CurrentLateralOffset + 1.32f;
+
             switch (obs.obstacleType)
             {
                 case EndlessObstacleType.SmallCenterHole:
                 {
-                    bool alignedCenter = !IsSplit && Mathf.Abs(CurrentLateralOffset) <= 0.72f;
-                    bool smallEnough = CurrentMass <= obs.maxAllowedMassForSmallHole;
+                    if (IsSplit)
+                    {
+                        // One piece can pass if aligned with hole, or one piece is lost and player continues as single!
+                        bool leftInHole = Mathf.Abs(leftPieceX) <= 0.85f;
+                        bool rightInHole = Mathf.Abs(rightPieceX) <= 0.85f;
+                        SacrificeOneSplitPieceAndContinue(obs, leftInHole || rightInHole
+                            ? "⚠ TEK DELİK! Parçalardan biri geçti, diğeri duvarda kaldı!"
+                            : "💥 PARÇALARDAN BİRİ DUVARA ÇARPTI! Tek parçayla devam ediyorsun!");
+                        return;
+                    }
+
+                    bool alignedCenter = Mathf.Abs(CurrentLateralOffset) <= 0.92f;
+                    bool smallEnough = CurrentMass <= obs.maxAllowedMassForSmallHole + 8f;
                     if (alignedCenter && smallEnough)
                     {
                         obs.resolved = true;
@@ -510,11 +542,9 @@ namespace Jelly
                     }
                     else
                     {
-                        string reason = IsSplit
-                            ? "✖ DAR DELİK TEK VE KÜÇÜK JÖLE İSTER! Altın (><) ve Kırmızı (-) yakala!"
-                            : (!alignedCenter
-                                ? "✖ DUVARA ÇARPTIN! Ortadaki deliğe hizalan!"
-                                : $"✖ ÇOK BÜYÜKSÜN ({CurrentMass:F0} > {obs.maxAllowedMassForSmallHole:F0})! Kırmızı (-) yakalayıp küçül!");
+                        string reason = !alignedCenter
+                            ? "💥 DUVARA ÇARPTIN (-25 Kütle)! Ortadaki deliğe hizalan!"
+                            : $"💥 DELİK İÇİN BÜYÜKTÜN (-25 Kütle)! Kırmızı (-) yakalayıp küçülmeliydin!";
                         TriggerObstacleCrash(obs, reason);
                     }
                     break;
@@ -522,27 +552,47 @@ namespace Jelly
 
                 case EndlessObstacleType.TwinSplitTunnels:
                 {
-                    bool alignedStraddle = IsSplit && Mathf.Abs(CurrentLateralOffset) <= 0.85f;
-                    if (alignedStraddle)
+                    if (IsSplit)
                     {
-                        obs.resolved = true;
-                        Score += 35;
-                        SetBanner("✓ İKİLİ TÜNELDEN BÖLÜNEREK GEÇTİN! (+35 Puan)", 2.2f);
+                        // Forgiving check: if roughly centered, both pass; if way off to one side, 1 piece passes and 1 piece splats!
+                        if (Mathf.Abs(CurrentLateralOffset) <= 1.35f)
+                        {
+                            obs.resolved = true;
+                            Score += 35;
+                            SetBanner("✓ İKİLİ TÜNELDEN BÖLÜNEREK GEÇTİN! (+35 Puan)", 2.2f);
+                        }
+                        else
+                        {
+                            SacrificeOneSplitPieceAndContinue(obs, "⚠ YANA KAYDIN! Parçalardan biri direğe çarptı, kalan parçayla devam ediyorsun!");
+                        }
                     }
                     else
                     {
-                        string reason = !IsSplit
-                            ? "✖ ORTADA DİREK VAR! Önce Mor (÷2) kristali yakalayıp ikiye bölünmelisin!"
-                            : "✖ DİREĞE ÇARPTIN! İki parçayı yola ortala!";
-                        TriggerObstacleCrash(obs, reason);
+                        // Unsplit jelly: if steered into left or right tunnel (-1.45 or +1.45) and small enough, let it pass!
+                        if (Mathf.Abs(CurrentLateralOffset) >= 0.75f && CurrentMass <= 85f)
+                        {
+                            obs.resolved = true;
+                            Score += 25;
+                            SetBanner("✓ YAN TÜNELDEN GEÇTİN! (+25 Puan)", 2.0f);
+                        }
+                        else
+                        {
+                            TriggerObstacleCrash(obs, "💥 ORTADAKİ DİREĞE ÇARPTIN (-25 Kütle)! Mor (÷2) yakalayıp bölünmeliydin!");
+                        }
                     }
                     break;
                 }
 
                 case EndlessObstacleType.HeavySmashWall:
                 {
-                    bool alignedCenter = Mathf.Abs(CurrentLateralOffset) <= 1.25f;
-                    bool heavyEnough = !IsSplit && CurrentMass >= obs.minRequiredMassForSmash;
+                    if (IsSplit)
+                    {
+                        SacrificeOneSplitPieceAndContinue(obs, "💥 DUVARA BÖLÜNMÜŞ ÇARPTIN! Parçalardan biri kırıldı, tek parçayla devam!");
+                        return;
+                    }
+
+                    bool alignedCenter = Mathf.Abs(CurrentLateralOffset) <= 1.45f;
+                    bool heavyEnough = CurrentMass >= obs.minRequiredMassForSmash - 10f;
                     if (alignedCenter && heavyEnough)
                     {
                         obs.resolved = true;
@@ -552,17 +602,23 @@ namespace Jelly
                     }
                     else
                     {
-                        string reason = IsSplit
-                            ? "✖ KIRILABİLİR DUVAR İÇİN TEK VE BÜYÜK JÖLE GEREKİR!"
-                            : $"✖ KÜTLEN YETERSİZ ({CurrentMass:F0} < {obs.minRequiredMassForSmash:F0})! Yeşil (+) yakalayıp büyü!";
-                        TriggerObstacleCrash(obs, reason);
+                        TriggerObstacleCrash(obs, $"💥 DUVARI KIRAMADIN (-25 Kütle)! Yeşil (+) toplayıp büyümeliydin!");
                     }
                     break;
                 }
 
                 case EndlessObstacleType.LeftOpeningWall:
                 {
-                    if (!IsSplit && CurrentLateralOffset <= -0.85f)
+                    if (IsSplit)
+                    {
+                        bool leftPassed = leftPieceX <= -0.65f;
+                        SacrificeOneSplitPieceAndContinue(obs, leftPassed
+                            ? "✓ SOL PARÇA AÇIKLIKTAN GEÇTİ, sağ parça duvarda kaldı!"
+                            : "💥 SAĞ TARAF KAPALIYDI! Tek parçayla devam ediyorsun!");
+                        return;
+                    }
+
+                    if (CurrentLateralOffset <= -0.65f)
                     {
                         obs.resolved = true;
                         Score += 25;
@@ -570,14 +626,23 @@ namespace Jelly
                     }
                     else
                     {
-                        TriggerObstacleCrash(obs, "✖ SAĞ TARAF KAPALI! Sol açıklıktan geç!");
+                        TriggerObstacleCrash(obs, "💥 SAĞ TARAF KAPALI (-25 Kütle)! Sol açıklıktan geçmeliydin!");
                     }
                     break;
                 }
 
                 case EndlessObstacleType.RightOpeningWall:
                 {
-                    if (!IsSplit && CurrentLateralOffset >= 0.85f)
+                    if (IsSplit)
+                    {
+                        bool rightPassed = rightPieceX >= 0.65f;
+                        SacrificeOneSplitPieceAndContinue(obs, rightPassed
+                            ? "✓ SAĞ PARÇA AÇIKLIKTAN GEÇTİ, sol parça duvarda kaldı!"
+                            : "💥 SOL TARAF KAPALIYDI! Tek parçayla devam ediyorsun!");
+                        return;
+                    }
+
+                    if (CurrentLateralOffset >= 0.65f)
                     {
                         obs.resolved = true;
                         Score += 25;
@@ -585,24 +650,36 @@ namespace Jelly
                     }
                     else
                     {
-                        TriggerObstacleCrash(obs, "✖ SOL TARAF KAPALI! Sağ açıklıktan geç!");
+                        TriggerObstacleCrash(obs, "💥 SOL TARAF KAPALI (-25 Kütle)! Sağ açıklıktan geçmeliydin!");
                     }
                     break;
                 }
             }
         }
 
+        private void SacrificeOneSplitPieceAndContinue(EndlessGateObstacle obs, string message)
+        {
+            obs.resolved = true;
+            obs.ShatterBreakablePiece();
+            IsSplit = false;
+            CurrentMass = Mathf.Max(40f, CurrentMass * 0.55f);
+            _displayedMass = CurrentMass;
+            _wobbleAmplitude = 0.30f;
+            _wobblePhase = 0f;
+            _bounceCooldown = 0.18f;
+            SetBanner(message, 2.8f);
+        }
+
         private void TriggerObstacleCrash(EndlessGateObstacle obs, string reason)
         {
-            _bounceCooldown = 0.55f;
-            CurrentMass -= 35f;
-            SetBanner(reason, 3.2f);
-            if (CurrentMass < 25f)
-            {
-                CurrentMass = 0f;
-                IsGameOver = true;
-                SetBanner($"💥 OYUN BİTTİ! Skor: {Score} | Mesafe: {CurrentDistance:F0}m  [R veya Tıkla: Yeniden Başla]", 999f);
-            }
+            // Always mark obstacle resolved and break it so the player NEVER gets stuck on an obstacle!
+            obs.resolved = true;
+            obs.ShatterBreakablePiece();
+            _bounceCooldown = 0.22f;
+            _wobbleAmplitude = 0.32f;
+            _wobblePhase = 0f;
+            CurrentMass = Mathf.Max(35f, CurrentMass - 25f);
+            SetBanner(reason, 3.0f);
         }
 
         private void SetBanner(string msg, float duration)
