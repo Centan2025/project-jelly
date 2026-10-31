@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Level_20
+  m_EditorClassIdentifier: Jelly.Runtime:Jelly:JellyLevelDefinition
+  levelId: Level_20
+  displayName: Combined Mechanics #10
+  difficulty: 2
+  startingMass: 80
+  startPosition: {x: 0, y: 0.65, z: 0}
+  startEulerRotation: {x: 0, y: 0, z: 0}
+  allowedMechanics: -1
+  objects:
+  - id: Level_20_PickA
+    type: 3
+    position: {x: -1.2, y: 0.6, z: 6}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  gates:
+  - gateId: Level_20_Slot
+    gateType: 6
+    position: {x: 0, y: 1, z: 12}
+    apertureOrHalfWidth: 0.36
+    minMass: 20
+    maxMass: 160
+    requireSplit: 0
+  - gateId: Level_20_MassGate
+    gateType: 7
+    position: {x: 0, y: 1, z: 19}
+    apertureOrHalfWidth: 0.75
+    minMass: 60
+    maxMass: 220
+    requireSplit: 0
+  checkpoints:
+  - checkpointId: Level_20_CP1
+    position: {x: 0, y: 0.6, z: 13}
+    radius: 1.5
+  goalPosition: {x: 0, y: 0.5, z: 26}
+  goalScale: {x: 4.5, y: 1.5, z: 3}
+  requiredMinMassAtGoal: 60
+  requireSingleMergedJellyAtGoal: 0
+  targetTimeSeconds: 24
+  massPreservationTarget: 64
+  ratingRules:
+    threeStarMaxTime: 19.2
+    twoStarMaxTime: 33.6
+    threeStarMinMass: 64
+    twoStarMinMass: 60
+  nextLevelId: Level_21
+  nextLevelReference: {fileID: 11400000, guid: 05eb3ae9fc11da74eb71208788f8173b, type: 2}

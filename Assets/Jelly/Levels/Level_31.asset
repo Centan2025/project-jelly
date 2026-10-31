@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Level_31
+  m_EditorClassIdentifier: Jelly.Runtime:Jelly:JellyLevelDefinition
+  levelId: Level_31
+  displayName: Momentum & Timing #21
+  difficulty: 4
+  startingMass: 140
+  startPosition: {x: 0, y: 0.65, z: 0}
+  startEulerRotation: {x: 0, y: 0, z: 0}
+  allowedMechanics: -1
+  objects:
+  - id: Level_31_PickA
+    type: 3
+    position: {x: 1.2, y: 0.6, z: 6}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: Level_31_Launcher
+    type: 18
+    position: {x: 0, y: 0.3, z: 16}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 3.5, y: 0.4, z: 2}
+    paramA: 1.2
+    paramB: 11.5
+    linkedTargetId: 
+  - id: Level_31_BreakWall
+    type: 13
+    position: {x: 0, y: 1, z: 21}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 5.5, y: 2, z: 0.6}
+    paramA: 700
+    paramB: 0
+    linkedTargetId: 
+  gates:
+  - gateId: Level_31_Timed
+    gateType: 9
+    position: {x: 0, y: 1, z: 12}
+    apertureOrHalfWidth: 0.65
+    minMass: 1.8
+    maxMass: 2.2
+    requireSplit: 0
+  checkpoints:
+  - checkpointId: Level_31_CP1
+    position: {x: 0, y: 0.6, z: 14.5}
+    radius: 1.5
+  goalPosition: {x: 0, y: 0.5, z: 29}
+  goalScale: {x: 4.5, y: 1.5, z: 3}
+  requiredMinMassAtGoal: 120
+  requireSingleMergedJellyAtGoal: 0
+  targetTimeSeconds: 30
+  massPreservationTarget: 120
+  ratingRules:
+    threeStarMaxTime: 24
+    twoStarMaxTime: 42
+    threeStarMinMass: 120
+    twoStarMinMass: 120
+  nextLevelId: Level_32
+  nextLevelReference: {fileID: 11400000, guid: 43e34902c75fdc041ae8407f447e1b4d, type: 2}

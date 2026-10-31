@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Jelly/Scenes/MainMenu.unity
+    guid: 1e77bbbb7c6720749822b954e47ceb12
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_01.unity
+    guid: 0352313c940a129419c031efdc3344e0
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_02.unity
+    guid: 85323a449f708e24c860e322a3d936cb
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_03.unity
+    guid: 44597130f3f84334abbf145e2a3d667a
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_04.unity
+    guid: 7fe960348ed464448bcabf2ac3737c4b
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_05.unity
+    guid: ae127dcc1e1a52a489b8533f9d2a7de5
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_06.unity
+    guid: 8939085b91f5453419349e8b2faa9b77
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_07.unity
+    guid: a415845653857f943a2824123d02e9de
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_08.unity
+    guid: a4cb4ee711a333648ae3771ee28a7c0d
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_09.unity
+    guid: 6ac94f590a5c62747af4e027d3f41691
+  - enabled: 1
+    path: Assets/Jelly/Scenes/Level_10.unity
+    guid: 9a37782ac00047343b15b5ff0a244907
+  - enabled: 1
+    path: Assets/Jelly/Scenes/MechanicsTestSandbox.unity
+    guid: 233f2331fc347384aa97009ec6492bb8
+  m_configObjects:
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

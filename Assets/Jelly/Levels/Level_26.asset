@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Level_26
+  m_EditorClassIdentifier: Jelly.Runtime:Jelly:JellyLevelDefinition
+  levelId: Level_26
+  displayName: Multi-Path & Split #16
+  difficulty: 3
+  startingMass: 120
+  startPosition: {x: 0, y: 0.65, z: 0}
+  startEulerRotation: {x: 0, y: 0, z: 0}
+  allowedMechanics: -1
+  objects:
+  - id: Level_26_PickA
+    type: 3
+    position: {x: -1.2, y: 0.6, z: 6}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: Level_26_Bridge
+    type: 14
+    position: {x: 0, y: 0.1, z: 19}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 4, y: 0.3, z: 4}
+    paramA: 150
+    paramB: 0
+    linkedTargetId: 
+  gates:
+  - gateId: Level_26_Split
+    gateType: 8
+    position: {x: 0, y: 1, z: 13}
+    apertureOrHalfWidth: 0.44
+    minMass: 20
+    maxMass: 70
+    requireSplit: 1
+  checkpoints:
+  - checkpointId: Level_26_CP1
+    position: {x: 0, y: 0.6, z: 14.5}
+    radius: 1.5
+  goalPosition: {x: 0, y: 0.5, z: 29}
+  goalScale: {x: 4.5, y: 1.5, z: 3}
+  requiredMinMassAtGoal: 100
+  requireSingleMergedJellyAtGoal: 0
+  targetTimeSeconds: 27
+  massPreservationTarget: 100
+  ratingRules:
+    threeStarMaxTime: 21.6
+    twoStarMaxTime: 37.8
+    threeStarMinMass: 100
+    twoStarMinMass: 100
+  nextLevelId: Level_27
+  nextLevelReference: {fileID: 11400000, guid: a9e1eed36a25c2645be9312ba5b93676, type: 2}

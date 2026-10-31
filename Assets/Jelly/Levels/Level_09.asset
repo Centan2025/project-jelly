@@ -1,0 +1,72 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Level_09
+  m_EditorClassIdentifier: Jelly.Runtime:Jelly:JellyLevelDefinition
+  levelId: Level_09
+  displayName: Mass Survival
+  difficulty: 4
+  startingMass: 120
+  startPosition: {x: 0, y: 0.65, z: 0}
+  startEulerRotation: {x: 0, y: 0, z: 0}
+  allowedMechanics: 7
+  objects:
+  - id: L09_Pickup1
+    type: 3
+    position: {x: -1.2, y: 0.6, z: 6}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: L09_Hazard1
+    type: 4
+    position: {x: 0, y: 0.25, z: 11}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 2.2, y: 0.4, z: 2}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: L09_Pickup2
+    type: 3
+    position: {x: 1.2, y: 0.6, z: 16}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: L09_Hazard2
+    type: 4
+    position: {x: 0, y: 0.25, z: 21}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 2.2, y: 0.4, z: 2}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  gates: []
+  checkpoints:
+  - checkpointId: Level_09_CP1
+    position: {x: 0, y: 0.6, z: 15}
+    radius: 1.5
+  goalPosition: {x: 0, y: 0.5, z: 30}
+  goalScale: {x: 4.5, y: 1.5, z: 3}
+  requiredMinMassAtGoal: 80
+  requireSingleMergedJellyAtGoal: 0
+  targetTimeSeconds: 30
+  massPreservationTarget: 96
+  ratingRules:
+    threeStarMaxTime: 24
+    twoStarMaxTime: 42
+    threeStarMinMass: 96
+    twoStarMinMass: 80
+  nextLevelId: Level_10
+  nextLevelReference: {fileID: 11400000, guid: 0e77d46c9b7b6364e92c68860ab964d6, type: 2}

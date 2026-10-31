@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Level_41
+  m_EditorClassIdentifier: Jelly.Runtime:Jelly:JellyLevelDefinition
+  levelId: Level_41
+  displayName: Master Trial #31
+  difficulty: 5
+  startingMass: 100
+  startPosition: {x: 0, y: 0.65, z: 0}
+  startEulerRotation: {x: 0, y: 0, z: 0}
+  allowedMechanics: -1
+  objects:
+  - id: Level_41_PickA
+    type: 3
+    position: {x: 1.2, y: 0.6, z: 6}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: Level_41_IceZone
+    type: 19
+    position: {x: 0, y: 0.05, z: 21}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 5, y: 0.2, z: 4}
+    paramA: 0.35
+    paramB: 0
+    linkedTargetId: 
+  gates:
+  - gateId: Level_41_Narrow
+    gateType: 6
+    position: {x: 0, y: 1, z: 10}
+    apertureOrHalfWidth: 0.36
+    minMass: 20
+    maxMass: 160
+    requireSplit: 0
+  - gateId: Level_41_Split
+    gateType: 8
+    position: {x: 0, y: 1, z: 16}
+    apertureOrHalfWidth: 0.44
+    minMass: 20
+    maxMass: 70
+    requireSplit: 1
+  checkpoints:
+  - checkpointId: Level_41_CP1
+    position: {x: 0, y: 0.6, z: 14.5}
+    radius: 1.5
+  goalPosition: {x: 0, y: 0.5, z: 29}
+  goalScale: {x: 4.5, y: 1.5, z: 3}
+  requiredMinMassAtGoal: 80
+  requireSingleMergedJellyAtGoal: 0
+  targetTimeSeconds: 33
+  massPreservationTarget: 80
+  ratingRules:
+    threeStarMaxTime: 26.4
+    twoStarMaxTime: 46.2
+    threeStarMinMass: 80
+    twoStarMinMass: 80
+  nextLevelId: Level_42
+  nextLevelReference: {fileID: 11400000, guid: 10cdf0348f77f4e439c27d64e5ca5342, type: 2}

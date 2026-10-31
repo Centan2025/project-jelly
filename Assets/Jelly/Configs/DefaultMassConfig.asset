@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5350e233fa0b824f81cb46e62c79433, type: 3}
+  m_Name: DefaultMassConfig
+  m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMassConfig
+  baseMass: 100
+  minMass: 20
+  maxMass: 200
+  baseRadius: 0.5
+  pickupDelta: 20
+  drainDelta: 20
+  interpolationSpeed: 10
+  maxLateralCompressionRatio: 0.62
+  maxVerticalCompressionRatio: 0.65
+  deformationSpring: 18
+  deformationDamping: 6

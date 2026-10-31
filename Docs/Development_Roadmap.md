@@ -1,0 +1,22 @@
+# Project Jelly — Development Roadmap & Phase Status Matrix
+
+**Project:** Project Jelly V1.0 (Unity 6 `6000.5.6f1` URP)  
+**Branch:** `feat/project-jelly-v1`
+
+## Phase Status Overview
+
+| Phase | Name | Status | Key Deliverables Created | Verification Evidence |
+|---|---|---|---|---|
+| **Phase 0** | Initial Audit & Setup | `PASS` | `Docs/00_Project_Audit.md`, `.gitignore`, Git branch `feat/project-jelly-v1`, Unity 6 URP project setup | Unity `6000.5.6f1`, `com.unity.inputsystem` `1.20.0`, `com.unity.render-pipelines.universal` `17.0.1`, `com.unity.test-framework` `1.4.2` verified |
+| **Phase 1** | Player Movement System | `PASS` | [JellyMovementSystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyMovementSystem.cs), `DefaultMovementConfig.asset` | `PlayerMovement_RollsAndBrakesOnFlatAndSlopedGround` passed (`0.886s`) |
+| **Phase 2** | Mass, Volume & Morph System | `PASS` | [JellyMassAndMorphSystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyMassAndMorphSystem.cs), `DefaultMassConfig.asset` | `MassFormula_CubeRootRadiusScaling_IsAccurate`, `MassModel_MinMaxBounds_AreClampedCorrectly`, `MassPickupAndDrain_UpdateMassAndRadiusWithoutGroundPenetration` passed |
+| **Phase 3** | Gate & Obstacle System | `PASS` | [JellyGateSystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyGateSystem.cs), `CircularGate.prefab` | `GateClearanceEvaluator_ThresholdsAndBoundaryConditions_AreCorrect`, `GateClearance_BlocksOversizedAndAllowsShrunkOrSqueezedJelly` passed |
+| **Phase 4** | Split & Merge System | `PASS` | [JellySplitAndMergeSystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellySplitAndMergeSystem.cs) | `MassConservation_SplitAndMerge_ConservesTotalMass`, `SplitMergeAndFragmentLoss_EnforcesConservationAndReportsLoss` passed |
+| **Phase 5** | Advanced Physics & Interactions | `PASS` | [JellyInteractionsSystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyInteractionsSystem.cs), `MechanicsTestSandbox.unity` | `AdvancedMechanics_PressurePlateMomentumBridgeAndSpring_WorkCorrectly` passed |
+| **Phase 6** | Data-Driven Level System | `PASS` | [JellyLevelSystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyLevelSystem.cs) | `LevelValidator_ValidatesAll50LevelsAndRejectsInvalidData`, `CheckpointManager_StateTransitions_UpdateRespawnState`, `SaveGameService_PersistsAndValidatesProgression` passed |
+| **Phase 7** | First 10 Levels (Vertical Slice) | `PASS` | `Assets/Jelly/Levels/Level_01.asset` .. `Level_10.asset`, `Assets/Jelly/Scenes/Level_01.unity` .. `Level_10.unity` | `CheckpointRestartAndProgression_WorkEndToEndAcrossAll10Levels` passed across all 10 levels |
+| **Phase 8** | Visual System & UI | `PASS` | [JellyCameraVisualAndUISystem.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyCameraVisualAndUISystem.cs), `M_JellyStylized.mat`, `M_TrackPastel.mat`, `M_GateAccent.mat`, `MainMenu.unity` | Compiled & baked into all 12 scenes and Android APK |
+| **Phase 9** | Camera & Mobile Experience | `PASS` | `JellyCameraController`, `JellySafeAreaFitter`, `JellyMobileQualityManager` | Safe area, look-ahead, wall obstruction spherecast, and 60/30 FPS profiles verified |
+| **Phase 10** | Testing & Quality Gates | `CONDITIONAL PASS` | [JellyEditModeTests.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Tests/EditMode/JellyEditModeTests.cs), [JellyPlayModeTests.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Tests/PlayMode/JellyPlayModeTests.cs) | `7/7` EditMode + `7/7` PlayMode passed (`14/14` total). On-device ADB test is `NOT VERIFIED` because no physical Android device is attached (`adb devices` empty) |
+| **Phase 11** | Vertical Slice Release | `PASS` | `Builds/Android/ProjectJelly_V1.apk` (`29,936,106` bytes), 12 playable scenes, prefabs, configs, docs | APK build succeeded with `0` errors |
+| **Phase 12** | Content Expansion (Levels 11–50) | `PASS` | `Assets/Jelly/Levels/Level_11.asset` .. `Level_50.asset` via [JellyLevelCatalogFactory.cs](file:///c:/Users/ASUS/.gemini/antigravity/scratch/JellyShift/Assets/Jelly/Runtime/JellyLevelCatalogFactory.cs) | All 50 levels pass `LevelValidator` and runtime PlayMode loading checks |

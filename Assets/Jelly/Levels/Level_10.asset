@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: Level_10
+  m_EditorClassIdentifier: Jelly.Runtime:Jelly:JellyLevelDefinition
+  levelId: Level_10
+  displayName: The Jelly Trial
+  difficulty: 5
+  startingMass: 100
+  startPosition: {x: 0, y: 0.65, z: 0}
+  startEulerRotation: {x: 0, y: 0, z: 0}
+  allowedMechanics: -1
+  objects:
+  - id: L10_Pickup
+    type: 3
+    position: {x: 0, y: 0.6, z: 23}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 0, y: 0, z: 0}
+    paramA: 20
+    paramB: 0
+    linkedTargetId: 
+  - id: L10_Booster
+    type: 18
+    position: {x: 0, y: 0.3, z: 26}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 3.5, y: 0.4, z: 2}
+    paramA: 1.2
+    paramB: 11
+    linkedTargetId: 
+  - id: L10_FinalBarrier
+    type: 13
+    position: {x: 0, y: 1, z: 30}
+    eulerRotation: {x: 0, y: 0, z: 0}
+    scale: {x: 5.5, y: 2, z: 0.6}
+    paramA: 750
+    paramB: 0
+    linkedTargetId: 
+  gates:
+  - gateId: L10_NarrowEntry
+    gateType: 6
+    position: {x: 0, y: 1, z: 8}
+    apertureOrHalfWidth: 0.35
+    minMass: 20
+    maxMass: 140
+    requireSplit: 0
+  - gateId: L10_SplitSection
+    gateType: 8
+    position: {x: 0, y: 1, z: 16}
+    apertureOrHalfWidth: 0.44
+    minMass: 20
+    maxMass: 60
+    requireSplit: 1
+  checkpoints:
+  - checkpointId: Level_10_CP1
+    position: {x: 0, y: 0.6, z: 18}
+    radius: 1.5
+  goalPosition: {x: 0, y: 0.5, z: 36}
+  goalScale: {x: 4.5, y: 1.5, z: 3}
+  requiredMinMassAtGoal: 95
+  requireSingleMergedJellyAtGoal: 1
+  targetTimeSeconds: 33
+  massPreservationTarget: 95
+  ratingRules:
+    threeStarMaxTime: 26.4
+    twoStarMaxTime: 46.2
+    threeStarMinMass: 95
+    twoStarMinMass: 95
+  nextLevelId: Level_11
+  nextLevelReference: {fileID: 11400000, guid: 697dddee83d6ee0499b2f5107d89389b, type: 2}
