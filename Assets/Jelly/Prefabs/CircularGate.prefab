@@ -12,8 +12,8 @@ GameObject:
   - component: {fileID: 7463580213061124377}
   - component: {fileID: 8394001427766490790}
   - component: {fileID: 4249760859956075763}
-  - component: {fileID: 868319597310230479}
-  - component: {fileID: 5115490293954501702}
+  - component: {fileID: 46565995915210731}
+  - component: {fileID: 7094835243149408478}
   m_Layer: 0
   m_Name: CircularGate
   m_TagString: Untagged
@@ -114,7 +114,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &868319597310230479
+--- !u!114 &46565995915210731
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -123,14 +123,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 3816148506728518416}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 741a0631f25e42f4caa316e49614c9e7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.ObstacleStateController
   blockingCollider: {fileID: 0}
   visualDoor: {fileID: 0}
   openLocalOffset: {x: 0, y: 2.5, z: 0}
   transitionSpeed: 8
---- !u!114 &5115490293954501702
+--- !u!114 &7094835243149408478
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -139,7 +139,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3816148506728518416}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 9ee441bce82243242924457c8f5d4a89, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.CircularGate
   barrierCollider: {fileID: 0}

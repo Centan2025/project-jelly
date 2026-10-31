@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c5350e233fa0b824f81cb46e62c79433, type: 3}
+  m_Script: {fileID: 11500000, guid: c4e839d7dd5ec6c44aee06f90b2b58f8, type: 3}
   m_Name: DefaultMassConfig
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMassConfig
   baseMass: 100

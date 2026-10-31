@@ -10,6 +10,7 @@ using UnityEngine.UI;
 
 namespace Jelly.Editor
 {
+    [InitializeOnLoad]
     public static class JellyProjectBuilder
     {
         private const string ConfigDir = "Assets/Jelly/Configs";
@@ -18,21 +19,76 @@ namespace Jelly.Editor
         private const string MaterialsDir = "Assets/Jelly/Materials";
         private const string ScenesDir = "Assets/Jelly/Scenes";
 
+        static JellyProjectBuilder()
+        {
+            EditorApplication.delayCall += EnsureScenePopulatedInEditor;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                EditorApplication.delayCall += EnsureScenePopulatedInEditor;
+            }
+        }
+
+        private static void EnsureScenePopulatedInEditor()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || Application.isPlaying || BuildPipeline.isBuildingPlayer) return;
+            var root = GameObject.Find("LevelRuntimeRoot");
+            var player = GameObject.Find("JellyPlayer");
+            if (root == null || player == null)
+            {
+                var sampleAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/SampleScene.unity");
+                var lvl01 = AssetDatabase.LoadAssetAtPath<JellyLevelDefinition>($"{LevelsDir}/Level_01.asset");
+                if (lvl01 == null || sampleAsset == null)
+                {
+                    GenerateAll();
+                }
+                if (!Application.isBatchMode)
+                {
+                    EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+                    if (GameObject.Find("LevelRuntimeRoot") == null)
+                    {
+                        GenerateAll();
+                        EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+                    }
+                    FocusSceneViewOnPlayer();
+                }
+            }
+        }
+
+        private static void FocusSceneViewOnPlayer()
+        {
+            var player = GameObject.Find("JellyPlayer");
+            if (player == null) return;
+            foreach (SceneView sv in SceneView.sceneViews)
+            {
+                if (sv != null)
+                {
+                    sv.LookAt(player.transform.position + new Vector3(0f, 1f, 6f), Quaternion.Euler(26f, 0f, 0f), 14f);
+                    sv.Repaint();
+                }
+            }
+            UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+        }
+
         [MenuItem("Jelly/Generate All Project Assets & Scenes")]
         public static void GenerateAll()
         {
             EnsureFolders();
 
-            // 1. Configs
             var moveCfg = CreateOrUpdateAsset<JellyMovementConfig>($"{ConfigDir}/DefaultMovementConfig.asset");
             var massCfg = CreateOrUpdateAsset<JellyMassConfig>($"{ConfigDir}/DefaultMassConfig.asset");
 
-            // 2. Stylized Materials
             var jellyMat = CreateOrUpdateMaterial($"{MaterialsDir}/M_JellyStylized.mat", new Color(0.28f, 0.80f, 0.98f, 0.88f), 0.85f);
             var trackMat = CreateOrUpdateMaterial($"{MaterialsDir}/M_TrackPastel.mat", new Color(0.92f, 0.94f, 0.98f, 1f), 0.25f);
             var gateMat = CreateOrUpdateMaterial($"{MaterialsDir}/M_GateAccent.mat", new Color(0.96f, 0.56f, 0.44f, 1f), 0.45f);
+            var goalMat = CreateOrUpdateMaterial($"{MaterialsDir}/M_GoalEmerald.mat", new Color(0.45f, 0.92f, 0.65f, 1f), 0.5f);
+            var pickupMat = CreateOrUpdateMaterial($"{MaterialsDir}/M_PickupLime.mat", new Color(0.35f, 0.95f, 0.55f, 1f), 0.7f);
+            var drainMat = CreateOrUpdateMaterial($"{MaterialsDir}/M_DrainCrimson.mat", new Color(0.95f, 0.35f, 0.42f, 1f), 0.4f);
 
-            // 3. Generate 50 LevelDefinition ScriptableObjects
             var generatedLevels = JellyLevelCatalogFactory.CreateFullCatalog50();
             var savedLevelAssets = new List<JellyLevelDefinition>(generatedLevels.Count);
             for (int i = 0; i < generatedLevels.Count; i++)
@@ -40,66 +96,68 @@ namespace Jelly.Editor
                 var runtimeDef = generatedLevels[i];
                 string assetPath = $"{LevelsDir}/{runtimeDef.levelId}.asset";
                 var existing = AssetDatabase.LoadAssetAtPath<JellyLevelDefinition>(assetPath);
-                if (existing == null)
-                {
-                    AssetDatabase.CreateAsset(runtimeDef, assetPath);
-                    savedLevelAssets.Add(runtimeDef);
-                }
-                else
+                if (existing != null)
                 {
                     EditorUtility.CopySerialized(runtimeDef, existing);
                     EditorUtility.SetDirty(existing);
                     savedLevelAssets.Add(existing);
                 }
+                else
+                {
+                    AssetDatabase.CreateAsset(runtimeDef, assetPath);
+                    savedLevelAssets.Add(runtimeDef);
+                }
             }
 
-            // Link nextLevelReference across saved assets
             for (int i = 0; i < savedLevelAssets.Count - 1; i++)
             {
                 savedLevelAssets[i].nextLevelReference = savedLevelAssets[i + 1];
                 EditorUtility.SetDirty(savedLevelAssets[i]);
             }
 
-            // Validate all 50 levels
+            AssetDatabase.SaveAssets();
+
             var validation = LevelValidator.ValidateCatalog(savedLevelAssets);
             if (!validation.IsValid)
             {
                 throw new Exception("Level catalog validation failed: " + string.Join("; ", validation.Errors));
             }
 
-            // 4. Create Prefabs
             CreatePlayerPrefab(moveCfg, massCfg, jellyMat);
-            CreatePickupPrefab();
+            CreatePickupPrefab(pickupMat);
             CreateGatePrefab(gateMat);
 
-            // 5. Create Scenes (MainMenu, VerticalSlice Level_01..Level_10, MechanicsSandbox)
             var buildScenes = new List<EditorBuildSettingsScene>();
 
+            // Populate SampleScene.unity with Level 01 so opening Unity shows Level 01 immediately!
+            string sampleScenePath = "Assets/Scenes/SampleScene.unity";
+            CreateGameplayScene(sampleScenePath, savedLevelAssets, 0, startInMainMenu: false, jellyMat, trackMat, gateMat, goalMat, pickupMat, drainMat);
+
             string mainMenuPath = $"{ScenesDir}/MainMenu.unity";
-            CreateGameplayScene(mainMenuPath, savedLevelAssets, 0, startInMainMenu: true);
+            CreateGameplayScene(mainMenuPath, savedLevelAssets, 0, startInMainMenu: false, jellyMat, trackMat, gateMat, goalMat, pickupMat, drainMat);
             buildScenes.Add(new EditorBuildSettingsScene(mainMenuPath, true));
 
             for (int i = 0; i < 10; i++)
             {
                 string levelScenePath = $"{ScenesDir}/{savedLevelAssets[i].levelId}.unity";
-                CreateGameplayScene(levelScenePath, savedLevelAssets, i, startInMainMenu: false);
+                CreateGameplayScene(levelScenePath, savedLevelAssets, i, startInMainMenu: false, jellyMat, trackMat, gateMat, goalMat, pickupMat, drainMat);
                 buildScenes.Add(new EditorBuildSettingsScene(levelScenePath, true));
             }
 
             string sandboxPath = $"{ScenesDir}/MechanicsTestSandbox.unity";
-            CreateGameplayScene(sandboxPath, savedLevelAssets, 9, startInMainMenu: false);
+            CreateGameplayScene(sandboxPath, savedLevelAssets, 9, startInMainMenu: false, jellyMat, trackMat, gateMat, goalMat, pickupMat, drainMat);
             buildScenes.Add(new EditorBuildSettingsScene(sandboxPath, true));
 
             EditorBuildSettings.scenes = buildScenes.ToArray();
 
-            // Configure mobile portrait settings
             PlayerSettings.companyName = "JellyStudio";
             PlayerSettings.productName = "Project Jelly";
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log($"[JellyProjectBuilder] Successfully generated 50 LevelDefinitions, Prefabs, Materials, and {buildScenes.Count} Scenes.");
+            FocusSceneViewOnPlayer();
+            Debug.Log($"[JellyProjectBuilder] Successfully generated 50 LevelDefinitions, Prefabs, Materials, SampleScene, and {buildScenes.Count} Scenes.");
         }
 
         public static void BatchBuildAndroidApk()
@@ -129,7 +187,7 @@ namespace Jelly.Editor
 
         private static void EnsureFolders()
         {
-            string[] dirs = { ConfigDir, LevelsDir, PrefabsDir, MaterialsDir, ScenesDir };
+            string[] dirs = { ConfigDir, LevelsDir, PrefabsDir, MaterialsDir, ScenesDir, "Assets/Scenes" };
             foreach (var d in dirs)
             {
                 if (!Directory.Exists(d))
@@ -140,12 +198,10 @@ namespace Jelly.Editor
 
         private static T CreateOrUpdateAsset<T>(string path) where T : ScriptableObject
         {
-            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
-            if (asset == null)
-            {
-                asset = ScriptableObject.CreateInstance<T>();
-                AssetDatabase.CreateAsset(asset, path);
-            }
+            var existing = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (existing != null) return existing;
+            var asset = ScriptableObject.CreateInstance<T>();
+            AssetDatabase.CreateAsset(asset, path);
             EditorUtility.SetDirty(asset);
             return asset;
         }
@@ -159,6 +215,7 @@ namespace Jelly.Editor
                 mat = new Material(sh);
                 AssetDatabase.CreateAsset(mat, path);
             }
+            mat.shader = sh;
             mat.color = color;
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
@@ -204,12 +261,14 @@ namespace Jelly.Editor
             UnityEngine.Object.DestroyImmediate(root);
         }
 
-        private static void CreatePickupPrefab()
+        private static void CreatePickupPrefab(Material pickupMat)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "MassPickupPrefab";
             go.transform.localScale = Vector3.one * 0.65f;
             go.GetComponent<Collider>().isTrigger = true;
+            var r = go.GetComponent<Renderer>();
+            if (r != null && pickupMat != null) r.sharedMaterial = pickupMat;
             go.AddComponent<JellyMassPickup>();
             PrefabUtility.SaveAsPrefabAsset(go, $"{PrefabsDir}/MassPickup.prefab");
             UnityEngine.Object.DestroyImmediate(go);
@@ -228,11 +287,40 @@ namespace Jelly.Editor
             UnityEngine.Object.DestroyImmediate(go);
         }
 
-        private static void CreateGameplayScene(string path, List<JellyLevelDefinition> catalog, int startIndex, bool startInMainMenu)
+        private static void CreateGameplayScene(
+            string path,
+            List<JellyLevelDefinition> _,
+            int startIndex,
+            bool startInMainMenu,
+            Material __,
+            Material ___,
+            Material ____,
+            Material _____,
+            Material ______,
+            Material _______)
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
-            // Configure Camera
+            // Reload persistent assets AFTER NewScene (NewScene unloads unreferenced ScriptableObjects in memory)
+            var moveCfg = AssetDatabase.LoadAssetAtPath<JellyMovementConfig>($"{ConfigDir}/DefaultMovementConfig.asset");
+            var massCfg = AssetDatabase.LoadAssetAtPath<JellyMassConfig>($"{ConfigDir}/DefaultMassConfig.asset");
+            var jellyMat = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/M_JellyStylized.mat");
+            var trackMat = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/M_TrackPastel.mat");
+            var gateMat = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/M_GateAccent.mat");
+            var goalMat = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/M_GoalEmerald.mat");
+            var pickupMat = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/M_PickupLime.mat");
+            var drainMat = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsDir}/M_DrainCrimson.mat");
+
+            var fallbackCatalog = JellyLevelCatalogFactory.CreateFullCatalog50();
+            var freshCatalog = new List<JellyLevelDefinition>(50);
+            for (int i = 0; i < 50; i++)
+            {
+                var loaded = AssetDatabase.LoadAssetAtPath<JellyLevelDefinition>($"{LevelsDir}/Level_{i + 1:D2}.asset");
+                freshCatalog.Add(loaded != null ? loaded : fallbackCatalog[i]);
+            }
+
+            JellyLevelDefinition activeDef = freshCatalog[Mathf.Clamp(startIndex, 0, freshCatalog.Count - 1)];
+
             Camera cam = Camera.main;
             if (cam != null)
             {
@@ -240,30 +328,44 @@ namespace Jelly.Editor
                 cam.clearFlags = CameraClearFlags.SolidColor;
                 var camCtrl = cam.gameObject.AddComponent<JellyCameraController>();
 
-                // Create GameSystems Root
                 var sysGo = new GameObject("JellyGameSystems");
                 var loader = sysGo.AddComponent<LevelLoader>();
+                loader.movementConfig = moveCfg;
+                loader.massConfig = massCfg;
+                loader.jellyMaterial = jellyMat;
+                loader.trackMaterial = trackMat;
+                loader.gateMaterial = gateMat;
+                loader.goalMaterial = goalMat;
+                loader.pickupMaterial = pickupMat;
+                loader.drainMaterial = drainMat;
+
                 var cpMgr = sysGo.AddComponent<CheckpointManager>();
                 var lvlMgr = sysGo.AddComponent<LevelManager>();
                 sysGo.AddComponent<JellyFXPool>();
 
-                lvlMgr.levelCatalog = new List<JellyLevelDefinition>(catalog);
+                lvlMgr.levelCatalog = freshCatalog;
                 lvlMgr.currentLevelIndex = startIndex;
                 lvlMgr.loader = loader;
                 lvlMgr.checkpointManager = cpMgr;
                 lvlMgr.cameraController = camCtrl;
 
-                // Pre-build initial level geometry in scene so the scene contains real objects in Editor too
-                lvlMgr.LoadLevel(catalog[startIndex]);
+                try
+                {
+                    lvlMgr.LoadLevel(activeDef);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[JellyProjectBuilder] LoadLevel failed in {path}: {ex}");
+                }
 
-                // Create UI Canvas with Safe Area
-                BuildSceneUI(lvlMgr, startInMainMenu);
+                BuildSceneUI(lvlMgr, activeDef, startInMainMenu);
             }
 
+            EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, path);
         }
 
-        private static void BuildSceneUI(LevelManager lvlMgr, bool startInMainMenu)
+        private static void BuildSceneUI(LevelManager lvlMgr, JellyLevelDefinition def, bool startInMainMenu)
         {
             var canvasGo = new GameObject("JellyUICanvas");
             var canvas = canvasGo.AddComponent<Canvas>();
@@ -288,8 +390,9 @@ namespace Jelly.Editor
             var pausePanel = CreatePanel(safeRoot.transform, "PausePanel");
             var completePanel = CreatePanel(safeRoot.transform, "LevelCompletePanel");
 
-            var titleText = CreateLabel(hudPanel.transform, "LevelTitleLabel", "Level 01 — First Roll", new Vector2(0.5f, 0.94f));
-            var massText = CreateLabel(hudPanel.transform, "MassLabel", "Mass: 100 | Parts: 1", new Vector2(0.5f, 0.88f));
+            string title = def != null ? $"{def.levelId.Replace('_', ' ')} — {def.displayName}" : "Level 01 — First Roll";
+            var titleText = CreateLabel(hudPanel.transform, "LevelTitleLabel", title, new Vector2(0.5f, 0.94f));
+            var massText = CreateLabel(hudPanel.transform, "MassLabel", $"Mass: {(def != null ? def.startingMass : 100f):F0} | Parts: 1  [WASD/Drag: Roll | Space: Split | E: Merge | R: Restart]", new Vector2(0.5f, 0.88f));
             var summaryText = CreateLabel(completePanel.transform, "SummaryLabel", "COMPLETED!", new Vector2(0.5f, 0.55f));
 
             var uiMgr = canvasGo.AddComponent<JellyUIManager>();
@@ -325,12 +428,12 @@ namespace Jelly.Editor
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin = anchor;
             rt.anchorMax = anchor;
-            rt.sizeDelta = new Vector2(340f, 45f);
+            rt.sizeDelta = new Vector2(360f, 50f);
             var txt = go.AddComponent<Text>();
             txt.text = content;
             txt.alignment = TextAnchor.MiddleCenter;
             txt.color = new Color(0.15f, 0.20f, 0.28f);
-            txt.fontSize = 20;
+            txt.fontSize = 18;
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             return txt;
         }

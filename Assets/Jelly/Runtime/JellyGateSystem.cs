@@ -93,44 +93,6 @@ namespace Jelly
         }
     }
 
-    public class ObstacleStateController : MonoBehaviour
-    {
-        public bool IsOpen { get; private set; }
-        public Collider blockingCollider;
-        public Transform visualDoor;
-        public Vector3 openLocalOffset = new Vector3(0f, 2.5f, 0f);
-        public float transitionSpeed = 8f;
-
-        private Vector3 _closedLocalPos;
-        private bool _initialized;
-
-        private void Awake() => EnsureInit();
-
-        private void EnsureInit()
-        {
-            if (_initialized) return;
-            _initialized = true;
-            if (blockingCollider == null) blockingCollider = GetComponent<Collider>();
-            if (visualDoor != null) _closedLocalPos = visualDoor.localPosition;
-        }
-
-        public void SetOpen(bool open)
-        {
-            EnsureInit();
-            IsOpen = open;
-            if (blockingCollider != null)
-                blockingCollider.enabled = !open;
-        }
-
-        private void Update()
-        {
-            if (visualDoor == null) return;
-            EnsureInit();
-            Vector3 target = IsOpen ? _closedLocalPos + openLocalOffset : _closedLocalPos;
-            visualDoor.localPosition = Vector3.MoveTowards(visualDoor.localPosition, target, Time.deltaTime * transitionSpeed);
-        }
-    }
-
     public abstract class GateBase : MonoBehaviour
     {
         public Collider barrierCollider;
@@ -172,6 +134,7 @@ namespace Jelly
             GateEvaluationResult res = Evaluate(state);
 
             var col = massController.GetComponent<Collider>();
+            if (barrierCollider == null) barrierCollider = GetComponent<Collider>();
             if (barrierCollider != null && col != null)
                 Physics.IgnoreCollision(col, barrierCollider, res.CanPass);
 
@@ -185,6 +148,7 @@ namespace Jelly
                 }
             }
 
+            if (stateController == null) stateController = GetComponent<ObstacleStateController>();
             if (stateController != null)
                 stateController.SetOpen(res.CanPass);
 
@@ -215,67 +179,5 @@ namespace Jelly
             var mc = other.GetComponentInParent<JellyMassController>();
             if (mc != null) TryProcessCandidate(mc);
         }
-    }
-
-    public class CircularGate : GateBase
-    {
-        public float apertureRadius = 0.45f;
-        public override GateEvaluationResult Evaluate(GateCandidateState candidate) =>
-            GateClearanceEvaluator.EvaluateCircular(candidate, apertureRadius);
-    }
-
-    public class RectangularGate : GateBase
-    {
-        public float halfWidth = 0.55f;
-        public float halfHeight = 0.55f;
-        public override GateEvaluationResult Evaluate(GateCandidateState candidate) =>
-            GateClearanceEvaluator.EvaluateRectangular(candidate, halfWidth, halfHeight);
-    }
-
-    public class NarrowSlotGate : GateBase
-    {
-        public float slotHalfWidth = 0.34f;
-        public float slotHalfHeight = 0.55f;
-        public override GateEvaluationResult Evaluate(GateCandidateState candidate) =>
-            GateClearanceEvaluator.EvaluateNarrowSlot(candidate, slotHalfWidth, slotHalfHeight);
-    }
-
-    public class CompressibleGate : GateBase
-    {
-        public float baseHalfWidth = 0.30f;
-        public float maxExpandedHalfWidth = 0.58f;
-        public float requiredForceScore = 350f;
-
-        public override GateEvaluationResult Evaluate(GateCandidateState candidate)
-        {
-            float forceScore = candidate.Mass * Mathf.Max(1f, candidate.ApproachSpeed);
-            float t = Mathf.Clamp01(forceScore / Mathf.Max(1f, requiredForceScore));
-            float effectiveHalfWidth = Mathf.Lerp(baseHalfWidth, maxExpandedHalfWidth, t);
-            return GateClearanceEvaluator.EvaluateNarrowSlot(candidate, effectiveHalfWidth, maxExpandedHalfWidth);
-        }
-    }
-
-    public class MassThresholdGate : GateBase
-    {
-        public float minAllowedMass = 0f;
-        public float maxAllowedMass = 85f;
-        public float apertureRadius = 0.65f;
-
-        public override GateEvaluationResult Evaluate(GateCandidateState candidate)
-        {
-            var massRes = GateClearanceEvaluator.EvaluateMassThreshold(candidate, minAllowedMass, maxAllowedMass);
-            if (!massRes.CanPass) return massRes;
-            return GateClearanceEvaluator.EvaluateCircular(candidate, apertureRadius);
-        }
-    }
-
-    public class SplitGate : GateBase
-    {
-        public float maxFragmentMass = 60f;
-        public float channelHalfWidth = 0.44f;
-        public bool requireSplitState = true;
-
-        public override GateEvaluationResult Evaluate(GateCandidateState candidate) =>
-            GateClearanceEvaluator.EvaluateSplit(candidate, maxFragmentMass, channelHalfWidth, requireSplitState);
     }
 }

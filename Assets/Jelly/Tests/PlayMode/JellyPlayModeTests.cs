@@ -198,8 +198,8 @@ namespace Jelly.Tests.PlayMode
                 frameTimesMs.Add(dtMs);
             }
 
-            int activeRbs = Object.FindObjectsByType<Rigidbody>(FindObjectsSortMode.None).Length;
-            int activeCols = Object.FindObjectsByType<Collider>(FindObjectsSortMode.None).Length;
+            int activeRbs = Object.FindObjectsByType<Rigidbody>().Length;
+            int activeCols = Object.FindObjectsByType<Collider>().Length;
             long totalAllocMemMb = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / (1024 * 1024);
             long monoUsedKb = UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong() / 1024;
             frameTimesMs.Sort();

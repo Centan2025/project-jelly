@@ -11,20 +11,20 @@ GameObject:
   - component: {fileID: 8126361188181609587}
   - component: {fileID: 2939313997232383734}
   - component: {fileID: 2724217891322439907}
-  - component: {fileID: 814362058959730211}
-  - component: {fileID: 8648619139754032525}
-  - component: {fileID: 7209944436903580751}
-  - component: {fileID: 4302590353099591503}
-  - component: {fileID: 6370408305629595828}
-  - component: {fileID: 3934341959553845953}
-  - component: {fileID: 6163865711323956377}
-  - component: {fileID: 934001737521129468}
-  - component: {fileID: 4476208639568655196}
-  - component: {fileID: 1378110318314989847}
-  - component: {fileID: 4261067098263978264}
-  - component: {fileID: 4022327842227656096}
-  - component: {fileID: 6296232763765113955}
-  - component: {fileID: 6773178675193720212}
+  - component: {fileID: 4114584208999104159}
+  - component: {fileID: 2915837814426487645}
+  - component: {fileID: 7629640505595105400}
+  - component: {fileID: 5950271561612817753}
+  - component: {fileID: 9034764701977861924}
+  - component: {fileID: 2062227728261091142}
+  - component: {fileID: 2778861256371461535}
+  - component: {fileID: 1937214025612819777}
+  - component: {fileID: 6865686271695134235}
+  - component: {fileID: 5417679681090645670}
+  - component: {fileID: 2553033281451309710}
+  - component: {fileID: 4480111817098074}
+  - component: {fileID: 235511592009735591}
+  - component: {fileID: 8151414384891107867}
   m_Layer: 0
   m_Name: JellyPlayer
   m_TagString: Untagged
@@ -96,7 +96,7 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &814362058959730211
+--- !u!114 &4114584208999104159
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -105,10 +105,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: d7763851b8736f7448fc99efe6b686b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyPhysicsBody
---- !u!114 &8648619139754032525
+--- !u!114 &2915837814426487645
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -117,13 +117,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: cb0dee7b107ccd34c97738e20f51adf7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyGroundDetector
   groundMask:
     serializedVersion: 2
     m_Bits: 4294967295
---- !u!114 &7209944436903580751
+--- !u!114 &7629640505595105400
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -132,7 +132,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 66d0111861a137046b14dd3ec4a993ff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyInputAdapter
   mode: 0
@@ -143,7 +143,7 @@ MonoBehaviour:
     Brake: 0
     SplitPressed: 0
     MergePressed: 0
---- !u!114 &4302590353099591503
+--- !u!114 &5950271561612817753
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -152,13 +152,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: dc950f72d4006d14ab53bad1ed8f20f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMotor
   config: {fileID: 11400000, guid: 6dd4ac7bacb626248bbc44963abbbccb, type: 2}
   physicsBody: {fileID: 0}
   groundDetector: {fileID: 0}
---- !u!114 &6370408305629595828
+--- !u!114 &9034764701977861924
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -167,13 +167,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: ec8b99e0604fce34f902dfe5e8111743, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMorphController
   lateralCompression: 1
   verticalCompression: 1
   preSplitStretch: 0
---- !u!114 &3934341959553845953
+--- !u!114 &2062227728261091142
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -182,14 +182,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: b6902a61259e3bd47b199afb34dfef00, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyDeformationController
   visualRoot: {fileID: 5141328318997025754}
   physicsBody: {fileID: 0}
   massController: {fileID: 0}
   morphController: {fileID: 0}
---- !u!114 &6163865711323956377
+--- !u!114 &2778861256371461535
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -198,14 +198,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 25a704b87e87fad4b933587bfd21ad93, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMassController
   config: {fileID: 11400000, guid: 0b7e72ee8e4c35140924c5b5b0406d65, type: 2}
   physicsBody: {fileID: 0}
   morphController: {fileID: 0}
   deformationController: {fileID: 0}
---- !u!114 &934001737521129468
+--- !u!114 &1937214025612819777
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -214,7 +214,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: b4d460c7b687d2d47a1b99c2923c7cb9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyController
   movementConfig: {fileID: 11400000, guid: 6dd4ac7bacb626248bbc44963abbbccb, type: 2}
@@ -225,7 +225,7 @@ MonoBehaviour:
   massController: {fileID: 0}
   morphController: {fileID: 0}
   deformationController: {fileID: 0}
---- !u!114 &4476208639568655196
+--- !u!114 &6865686271695134235
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -234,10 +234,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 040af587184f09f4fb0704cade9cfdc5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyFragment
---- !u!114 &1378110318314989847
+--- !u!114 &5417679681090645670
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -246,10 +246,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: dd2417d0cd508de4684aa7ea4fc9dde2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyFragmentRegistry
---- !u!114 &4261067098263978264
+--- !u!114 &2553033281451309710
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -258,11 +258,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 11120b406a8a0e84598b3913b2747d3b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyFragmentPool
   PrewarmCount: 2
---- !u!114 &4022327842227656096
+--- !u!114 &4480111817098074
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -271,13 +271,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 3a726136768421f469f34a0b94b91cd7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyFragmentInputRouter
   primaryInput: {fileID: 0}
   registry: {fileID: 0}
   selectedFragmentIndex: -1
---- !u!114 &6296232763765113955
+--- !u!114 &235511592009735591
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -286,7 +286,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 608e14fac6b4db24abc6662fec4312dc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellySplitController
   primaryController: {fileID: 0}
@@ -298,7 +298,7 @@ MonoBehaviour:
   splitImpulse: 3.2
   splitCooldown: 0.45
   maxFragments: 2
---- !u!114 &6773178675193720212
+--- !u!114 &8151414384891107867
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -307,7 +307,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1005692777921559947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: d74323dbaf532b94d9c5a4ef791c15db, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMergeController
   splitController: {fileID: 0}

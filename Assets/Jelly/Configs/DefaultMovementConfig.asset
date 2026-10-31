@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5fca04de12697a0498bc0871e0faeccf, type: 3}
+  m_Script: {fileID: 11500000, guid: 3780dec1af996944a8614d126ae1e10c, type: 3}
   m_Name: DefaultMovementConfig
   m_EditorClassIdentifier: Jelly.Runtime::Jelly.JellyMovementConfig
   acceleration: 28
