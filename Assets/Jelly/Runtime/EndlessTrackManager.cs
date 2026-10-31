@@ -18,10 +18,12 @@ namespace Jelly
         public Material drainMaterial;
 
         [Header("Endless Flow Settings")]
-        public float baseForwardSpeed = 10.5f;
-        public float maxForwardSpeed = 19f;
-        public float speedRampPerHundredMeters = 1.4f;
-        public float lateralSteerSpeed = 9.5f;
+        public float baseForwardSpeed = 9.5f;
+        public float maxForwardSpeed = 16f;
+        public float speedRampPerHundredMeters = 1.0f;
+        public float lateralSteerSpeed = 4.2f;
+        public float steerAcceleration = 7.0f;
+        public float steerDeceleration = 11.0f;
         public float maxLateralOffset = 2.45f;
         public float roadWidth = 6.4f;
         public float sliceLength = 2.0f;
@@ -45,12 +47,21 @@ namespace Jelly
         private Vector2 _dragPrevPos;
         private bool _dragging;
         private float _bounceCooldown;
+        private float _smoothedSteerInput;
 
         private readonly List<GameObject> _spawnedChunks = new List<GameObject>();
         private readonly List<EndlessGateObstacle> _activeObstacles = new List<EndlessGateObstacle>();
 
+        private void Awake()
+        {
+            // Enforce comfortable steering speed even if scene serialized an older value
+            if (lateralSteerSpeed > 4.5f) lateralSteerSpeed = 4.2f;
+            if (baseForwardSpeed > 10f) baseForwardSpeed = 9.5f;
+        }
+
         private void Start()
         {
+            if (lateralSteerSpeed > 4.5f) lateralSteerSpeed = 4.2f;
             if (mainCamera == null) mainCamera = Camera.main;
             StartNewEndlessRun();
         }
@@ -95,6 +106,14 @@ namespace Jelly
 
             if (primaryPlayer != null)
             {
+                primaryPlayer.enabled = false;
+                if (primaryPlayer.motor != null) primaryPlayer.motor.enabled = false;
+                if (primaryPlayer.inputAdapter != null) primaryPlayer.inputAdapter.enabled = false;
+                var splitCtrl = primaryPlayer.GetComponent<JellySplitController>();
+                if (splitCtrl != null) splitCtrl.enabled = false;
+                var mergeCtrl = primaryPlayer.GetComponent<JellyMergeController>();
+                if (mergeCtrl != null) mergeCtrl.enabled = false;
+
                 var rb = primaryPlayer.GetComponent<Rigidbody>();
                 if (rb != null)
                 {
@@ -193,27 +212,32 @@ namespace Jelly
             if (StatusBannerTimer > 0f) StatusBannerTimer -= dt;
             if (_bounceCooldown > 0f) _bounceCooldown -= dt;
 
-            // 1. Sample horizontal steering (A/D, Arrow keys, Mouse/Touch drag)
-            float steerInput = 0f;
+            // 1. Sample horizontal steering (A/D, Arrow keys, Mouse/Touch drag) with smooth acceleration/damping
+            float rawKeySteer = 0f;
             if (kb != null)
             {
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) steerInput -= 1f;
-                if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) steerInput += 1f;
+                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) rawKeySteer -= 1f;
+                if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) rawKeySteer += 1f;
             }
 
+            float accelRate = Mathf.Abs(rawKeySteer) > 0.01f ? steerAcceleration : steerDeceleration;
+            _smoothedSteerInput = Mathf.MoveTowards(_smoothedSteerInput, rawKeySteer, accelRate * dt);
+
+            float dragDeltaOffset = 0f;
+            float screenWidth = Mathf.Max(400f, Screen.width);
             var ts = Touchscreen.current;
             if (ts != null && ts.primaryTouch.press.isPressed)
             {
                 Vector2 p = ts.primaryTouch.position.ReadValue();
                 if (!_dragging) { _dragging = true; _dragPrevPos = p; }
-                steerInput += (p.x - _dragPrevPos.x) * 0.12f;
+                dragDeltaOffset = ((p.x - _dragPrevPos.x) / screenWidth) * roadWidth * 0.85f;
                 _dragPrevPos = p;
             }
             else if (Mouse.current != null && Mouse.current.leftButton.isPressed)
             {
                 Vector2 p = Mouse.current.position.ReadValue();
                 if (!_dragging) { _dragging = true; _dragPrevPos = p; }
-                steerInput += (p.x - _dragPrevPos.x) * 0.12f;
+                dragDeltaOffset = ((p.x - _dragPrevPos.x) / screenWidth) * roadWidth * 0.85f;
                 _dragPrevPos = p;
             }
             else
@@ -222,7 +246,8 @@ namespace Jelly
             }
 
             float maxOffset = IsSplit ? maxLateralOffset - 0.85f : maxLateralOffset;
-            CurrentLateralOffset = Mathf.Clamp(CurrentLateralOffset + steerInput * lateralSteerSpeed * dt, -maxOffset, maxOffset);
+            float nextOffset = CurrentLateralOffset + (_smoothedSteerInput * lateralSteerSpeed * dt) + dragDeltaOffset;
+            CurrentLateralOffset = Mathf.Clamp(nextOffset, -maxOffset, maxOffset);
 
             // 2. Advance along the winding road
             float speed = Mathf.Min(maxForwardSpeed, baseForwardSpeed + (CurrentDistance * 0.01f) * speedRampPerHundredMeters);
@@ -740,26 +765,28 @@ namespace Jelly
             if (mainCamera == null) mainCamera = Camera.main;
             if (mainCamera == null) return;
 
-            EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out Quaternion roadRot, out Vector3 roadRight);
-            EvaluateRoadCurve(CurrentDistance + 7.5f, out Vector3 lookAheadPt, out _, out _);
+            EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out _, out Vector3 roadRight);
+            EvaluateRoadCurve(CurrentDistance + 8.5f, out Vector3 lookAheadPt, out _, out _);
 
-            Vector3 camOffset = roadRot * new Vector3(0f, 5.2f, -7.2f) + roadRight * (CurrentLateralOffset * 0.45f);
-            mainCamera.transform.position = roadCenter + camOffset;
-            mainCamera.transform.rotation = Quaternion.LookRotation((lookAheadPt + Vector3.up * 0.5f) - mainCamera.transform.position, Vector3.up);
+            Vector3 horizForward = new Vector3(lookAheadPt.x - roadCenter.x, 0f, lookAheadPt.z - roadCenter.z).normalized;
+            Vector3 camPos = roadCenter - horizForward * 7.2f + Vector3.up * 5.0f + roadRight * (CurrentLateralOffset * 0.22f);
+            mainCamera.transform.position = camPos;
+            mainCamera.transform.rotation = Quaternion.LookRotation((lookAheadPt + Vector3.up * 0.4f) - camPos, Vector3.up);
         }
 
         private void UpdateCameraSmooth(float dt)
         {
             if (mainCamera == null) return;
 
-            EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out Quaternion roadRot, out Vector3 roadRight);
-            EvaluateRoadCurve(CurrentDistance + 8.0f, out Vector3 lookAheadPt, out _, out _);
+            EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out _, out Vector3 roadRight);
+            EvaluateRoadCurve(CurrentDistance + 8.5f, out Vector3 lookAheadPt, out _, out _);
 
-            Vector3 desiredPos = roadCenter + roadRot * new Vector3(0f, 5.2f, -7.2f) + roadRight * (CurrentLateralOffset * 0.45f);
-            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, desiredPos, Mathf.Clamp01(dt * 10f));
+            Vector3 horizForward = new Vector3(lookAheadPt.x - roadCenter.x, 0f, lookAheadPt.z - roadCenter.z).normalized;
+            Vector3 desiredPos = roadCenter - horizForward * 7.2f + Vector3.up * 5.0f + roadRight * (CurrentLateralOffset * 0.22f);
+            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, desiredPos, Mathf.Clamp01(dt * 8f));
 
-            Quaternion desiredRot = Quaternion.LookRotation((lookAheadPt + Vector3.up * 0.5f) - mainCamera.transform.position, Vector3.up);
-            mainCamera.transform.rotation = Quaternion.Slerp(mainCamera.transform.rotation, desiredRot, Mathf.Clamp01(dt * 10f));
+            Quaternion desiredRot = Quaternion.LookRotation((lookAheadPt + Vector3.up * 0.4f) - mainCamera.transform.position, Vector3.up);
+            mainCamera.transform.rotation = Quaternion.Slerp(mainCamera.transform.rotation, desiredRot, Mathf.Clamp01(dt * 8f));
         }
     }
 }
