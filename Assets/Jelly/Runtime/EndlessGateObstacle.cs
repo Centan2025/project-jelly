@@ -26,7 +26,7 @@ namespace Jelly
         public Transform movingPartA;
         public Transform movingPartB;
         public Transform movingPartC;
-        public float animSpeed = 2.2f;
+        public float animSpeed = 2.1f;
         public float animPhaseOffset;
         public bool resolved;
         public bool hasBouncedOnce;
@@ -45,59 +45,53 @@ namespace Jelly
 
         private void Update()
         {
-            if (resolved) return;
             float t = Time.time * animSpeed + animPhaseOffset;
 
             switch (obstacleType)
             {
                 case EndlessObstacleType.SlidingDoorWall:
                 {
-                    // The gap slides between X = -1.55 and X = +1.55
-                    CurrentOpeningCenterX = Mathf.Sin(t) * 1.55f;
-                    // movingPartA is Left sliding door, movingPartB is Right sliding door
-                    // Gap width is 1.90m (halfGap = 0.95m)
-                    float halfGap = 0.95f;
+                    // The gap slides between X = -1.45 and X = +1.45
+                    CurrentOpeningCenterX = Mathf.Sin(t) * 1.45f;
+                    float halfGap = 0.98f;
                     if (movingPartA != null)
                     {
                         float leftInnerEdge = CurrentOpeningCenterX - halfGap;
-                        float leftWidth = Mathf.Max(0.4f, leftInnerEdge - (-3.2f));
-                        movingPartA.localPosition = new Vector3(-3.2f + leftWidth * 0.5f, 1.1f, 0f);
-                        movingPartA.localScale = new Vector3(leftWidth, 2.2f, 0.58f);
+                        float leftWidth = Mathf.Max(0.35f, leftInnerEdge - (-3.2f));
+                        movingPartA.localPosition = new Vector3(-3.2f + leftWidth * 0.5f, 1.15f, 0f);
+                        movingPartA.localScale = new Vector3(leftWidth, 2.3f, 0.55f);
                     }
                     if (movingPartB != null)
                     {
                         float rightInnerEdge = CurrentOpeningCenterX + halfGap;
-                        float rightWidth = Mathf.Max(0.4f, 3.2f - rightInnerEdge);
-                        movingPartB.localPosition = new Vector3(3.2f - rightWidth * 0.5f, 1.1f, 0f);
-                        movingPartB.localScale = new Vector3(rightWidth, 2.2f, 0.58f);
+                        float rightWidth = Mathf.Max(0.35f, 3.2f - rightInnerEdge);
+                        movingPartB.localPosition = new Vector3(3.2f - rightWidth * 0.5f, 1.15f, 0f);
+                        movingPartB.localScale = new Vector3(rightWidth, 2.3f, 0.55f);
                     }
                     break;
                 }
 
                 case EndlessObstacleType.PincerShutters:
                 {
-                    // Two heavy blast doors open and close in the middle
-                    // Gap half-width oscillates between 0.25m (almost closed -> split or wait!) and 1.65m (wide open)
-                    float wave = (Mathf.Sin(t * 1.15f) + 1f) * 0.5f; // 0..1
-                    CurrentPincerGapHalfWidth = Mathf.Lerp(0.22f, 1.65f, wave);
+                    float wave = (Mathf.Sin(t * 1.1f) + 1f) * 0.5f;
+                    CurrentPincerGapHalfWidth = Mathf.Lerp(0.25f, 1.68f, wave);
                     if (movingPartA != null)
                     {
                         float w = 2.4f;
-                        movingPartA.localPosition = new Vector3(-CurrentPincerGapHalfWidth - w * 0.5f, 1.1f, 0f);
+                        movingPartA.localPosition = new Vector3(-CurrentPincerGapHalfWidth - w * 0.5f, 1.15f, 0f);
                     }
                     if (movingPartB != null)
                     {
                         float w = 2.4f;
-                        movingPartB.localPosition = new Vector3(+CurrentPincerGapHalfWidth + w * 0.5f, 1.1f, 0f);
+                        movingPartB.localPosition = new Vector3(+CurrentPincerGapHalfWidth + w * 0.5f, 1.15f, 0f);
                     }
                     break;
                 }
 
                 case EndlessObstacleType.VerticalCrusherGate:
                 {
-                    // Heavy piston moves up and down between bottomY = 0.65m (low, only small jelly <75 fits) and 1.85m (high, any jelly fits)
-                    float wave = (Mathf.Sin(t * 1.25f) + 1f) * 0.5f;
-                    CurrentCrusherBottomY = Mathf.Lerp(0.62f, 1.85f, wave);
+                    float wave = (Mathf.Sin(t * 1.2f) + 1f) * 0.5f;
+                    CurrentCrusherBottomY = Mathf.Lerp(0.62f, 1.90f, wave);
                     if (movingPartA != null)
                     {
                         float blockHeight = 1.6f;
@@ -108,21 +102,18 @@ namespace Jelly
 
                 case EndlessObstacleType.SwingingPendulum:
                 {
-                    // Overhead pendulum swings between -42 deg and +42 deg around pivot at (0, 3.8, 0)
-                    float angleDeg = Mathf.Sin(t * 1.35f) * 42f;
+                    float angleDeg = Mathf.Sin(t * 1.3f) * 42f;
                     if (movingPartA != null)
                     {
                         movingPartA.localRotation = Quaternion.Euler(0f, 0f, angleDeg);
                     }
-                    // Arm length is 3.0m downward from Y=3.8m -> head X = -Sin(angle) * 3.0m
                     CurrentHazardCenterX = -Mathf.Sin(angleDeg * Mathf.Deg2Rad) * 3.0f;
                     break;
                 }
 
                 case EndlessObstacleType.MovingTwinTunnels:
                 {
-                    // Entire twin tunnel assembly shifts left/right between -0.85m and +0.85m
-                    CurrentOpeningCenterX = Mathf.Sin(t * 0.9f) * 0.85f;
+                    CurrentOpeningCenterX = Mathf.Sin(t * 0.85f) * 0.80f;
                     if (movingPartA != null)
                     {
                         movingPartA.localPosition = new Vector3(CurrentOpeningCenterX, 0f, 0f);
@@ -136,15 +127,15 @@ namespace Jelly
         {
             switch (obstacleType)
             {
-                case EndlessObstacleType.SmallCenterHole: return $"DAR DELİK (Kütle ≤ {maxAllowedMassForSmallHole:F0})";
-                case EndlessObstacleType.TwinSplitTunnels: return "İKİZ TÜNEL (÷2 Bölün veya Yan Tünel)";
-                case EndlessObstacleType.HeavySmashWall: return $"KIRILABİLİR DUVAR (Kütle ≥ {minRequiredMassForSmash:F0})";
-                case EndlessObstacleType.LeftOpeningWall: return "◀ SOL AÇIKLIK";
-                case EndlessObstacleType.RightOpeningWall: return "SAĞ AÇIKLIK ▶";
-                case EndlessObstacleType.SlidingDoorWall: return "◀▶ HAREKETLİ KAYAR KAPI";
-                case EndlessObstacleType.PincerShutters: return "▶◀ AÇILIR-KAPANIR MAKAS KAPI";
-                case EndlessObstacleType.VerticalCrusherGate: return "▲▼ PİSTON KAPI (Kalkınca Geç / Küçül)";
-                case EndlessObstacleType.SwingingPendulum: return "⚠ SALLANAN BALYOZ (Kaçın!)";
+                case EndlessObstacleType.SmallCenterHole: return $"DAR GEÇİT (Kütle ≤ {maxAllowedMassForSmallHole:F0})";
+                case EndlessObstacleType.TwinSplitTunnels: return "İKİZ TÜNEL (÷2 Bölün)";
+                case EndlessObstacleType.HeavySmashWall: return $"CAM DUVAR (Kütle ≥ {minRequiredMassForSmash:F0} Kırar)";
+                case EndlessObstacleType.LeftOpeningWall: return "◀ SOL KORİDOR";
+                case EndlessObstacleType.RightOpeningWall: return "SAĞ KORİDOR ▶";
+                case EndlessObstacleType.SlidingDoorWall: return "◀▶ KAYAR KAPI";
+                case EndlessObstacleType.PincerShutters: return "▶◀ MAKAS KAPI";
+                case EndlessObstacleType.VerticalCrusherGate: return "▲▼ PİSTON KAPI";
+                case EndlessObstacleType.SwingingPendulum: return "⚠ DEV SARKAÇ";
                 case EndlessObstacleType.MovingTwinTunnels: return "◀÷2▶ HAREKETLİ İKİZ TÜNEL";
                 default: return "ENGEL";
             }
@@ -154,35 +145,29 @@ namespace Jelly
         {
             switch (obstacleType)
             {
-                case EndlessObstacleType.SmallCenterHole: return new Color(1.00f, 0.38f, 0.44f);
+                case EndlessObstacleType.SmallCenterHole: return new Color(1.00f, 0.35f, 0.42f);
                 case EndlessObstacleType.TwinSplitTunnels:
-                case EndlessObstacleType.MovingTwinTunnels: return new Color(0.80f, 0.45f, 1.00f);
-                case EndlessObstacleType.HeavySmashWall: return new Color(0.25f, 0.96f, 0.52f);
+                case EndlessObstacleType.MovingTwinTunnels: return new Color(0.76f, 0.38f, 1.00f);
+                case EndlessObstacleType.HeavySmashWall: return new Color(0.18f, 0.92f, 0.50f);
                 case EndlessObstacleType.SlidingDoorWall:
                 case EndlessObstacleType.PincerShutters:
-                case EndlessObstacleType.VerticalCrusherGate: return new Color(0.25f, 0.85f, 1.00f);
-                case EndlessObstacleType.SwingingPendulum: return new Color(1.00f, 0.65f, 0.18f);
-                default: return new Color(1.00f, 0.85f, 0.30f);
+                case EndlessObstacleType.VerticalCrusherGate: return new Color(0.15f, 0.80f, 0.98f);
+                case EndlessObstacleType.SwingingPendulum: return new Color(1.00f, 0.60f, 0.15f);
+                default: return new Color(1.00f, 0.80f, 0.22f);
             }
         }
 
+        /// <summary>
+        /// Only shatters the breakable center glass/crystal panel of HeavySmashWall.
+        /// Solid walls NEVER disappear or crumble when the player fails!
+        /// </summary>
         public void ShatterBreakablePiece()
         {
-            Vector3 burstCenter = transform.position + Vector3.up * 1.0f;
-            Color shardCol = GetGateHeaderColor();
-
-            if (breakableCenterPiece != null)
+            if (breakableCenterPiece != null && breakableCenterPiece.gameObject.activeSelf)
             {
-                burstCenter = breakableCenterPiece.position;
+                Vector3 burstCenter = breakableCenterPiece.position;
                 breakableCenterPiece.gameObject.SetActive(false);
-                SpawnDebrisBurst(burstCenter, shardCol, 10);
-                return;
-            }
-
-            SpawnDebrisBurst(burstCenter, shardCol, 8);
-            for (int i = 0; i < transform.childCount; i++)
-            {
-                transform.GetChild(i).gameObject.SetActive(false);
+                SpawnDebrisBurst(burstCenter, new Color(0.28f, 0.96f, 0.62f), 14);
             }
         }
 
