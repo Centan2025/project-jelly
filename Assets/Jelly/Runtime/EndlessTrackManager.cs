@@ -41,6 +41,7 @@ namespace Jelly
         public float StatusBannerTimer = 6f;
 
         private GameObject _secondarySplitVisual;
+        private GameObject _jellyBridgeVisual;
         private float _spawnedSliceUpToZ;
         private float _nextObstacleZ = 24f;
         private int _obstacleCounter;
@@ -48,6 +49,11 @@ namespace Jelly
         private bool _dragging;
         private float _bounceCooldown;
         private float _smoothedSteerInput;
+        private float _currentSplitBlend;
+        private float _splitBlendVelocity;
+        private float _displayedMass = 90f;
+        private float _wobbleAmplitude;
+        private float _wobblePhase;
 
         private readonly List<GameObject> _spawnedChunks = new List<GameObject>();
         private readonly List<EndlessGateObstacle> _activeObstacles = new List<EndlessGateObstacle>();
@@ -72,7 +78,11 @@ namespace Jelly
             CurrentDistance = 0f;
             CurrentLateralOffset = 0f;
             CurrentMass = 90f;
+            _displayedMass = 90f;
             IsSplit = false;
+            _currentSplitBlend = 0f;
+            _splitBlendVelocity = 0f;
+            _wobbleAmplitude = 0f;
             Score = 0;
             IsGameOver = false;
             _spawnedSliceUpToZ = -6f;
@@ -144,7 +154,25 @@ namespace Jelly
                     LevelLoader.ApplyMaterialOrColor(_secondarySplitVisual, jellyMaterial, new Color(0.28f, 0.80f, 0.98f, 0.9f));
                 }
             }
-            _secondarySplitVisual.SetActive(IsSplit);
+            _secondarySplitVisual.SetActive(IsSplit || _currentSplitBlend > 0.01f);
+
+            if (_jellyBridgeVisual == null)
+            {
+                var existingBridge = trackRoot.Find("JellySplitBridge");
+                if (existingBridge != null)
+                {
+                    _jellyBridgeVisual = existingBridge.gameObject;
+                }
+                else
+                {
+                    _jellyBridgeVisual = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    _jellyBridgeVisual.name = "JellySplitBridge";
+                    _jellyBridgeVisual.transform.SetParent(trackRoot, false);
+                    DestroyCollider(_jellyBridgeVisual);
+                    LevelLoader.ApplyMaterialOrColor(_jellyBridgeVisual, jellyMaterial, new Color(0.28f, 0.80f, 0.98f, 0.85f));
+                }
+            }
+            _jellyBridgeVisual.SetActive(false);
         }
 
         private void EnsureTrackRoot()
@@ -168,6 +196,7 @@ namespace Jelly
                 else DestroyImmediate(ch.gameObject);
             }
             _secondarySplitVisual = null;
+            _jellyBridgeVisual = null;
         }
 
         public static void EvaluateRoadCurve(float z, out Vector3 pos, out Quaternion rot, out Vector3 right)
@@ -278,41 +307,93 @@ namespace Jelly
             EnsurePlayerObjects();
             if (primaryPlayer == null) return;
 
-            EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out Quaternion roadRot, out Vector3 roadRight);
-            Vector3 roadUp = roadRot * Vector3.up;
-
-            float singleMass = IsSplit ? CurrentMass * 0.5f : CurrentMass;
-            float radius = JellyMassModel.ComputeRadius(singleMass, 100f, 0.52f);
-            float diameter = radius * 2f;
-
-            if (primaryPlayer.massController != null)
-                primaryPlayer.massController.SetMassImmediate(singleMass);
-
-            if (!IsSplit)
+            float dt = Application.isPlaying ? Time.deltaTime : 0.02f;
+            float targetBlend = IsSplit ? 1f : 0f;
+            if (Application.isPlaying)
             {
-                Vector3 worldPos = roadCenter + roadRight * CurrentLateralOffset + roadUp * (radius + 0.02f);
-                primaryPlayer.transform.position = worldPos;
-                primaryPlayer.transform.localScale = Vector3.one * diameter;
-                primaryPlayer.transform.Rotate(roadRight, forwardDelta * 110f, Space.World);
-                if (_secondarySplitVisual != null && _secondarySplitVisual.activeSelf)
-                    _secondarySplitVisual.SetActive(false);
+                _currentSplitBlend = Mathf.SmoothDamp(_currentSplitBlend, targetBlend, ref _splitBlendVelocity, 0.22f, 10f, dt);
+                _displayedMass = Mathf.Lerp(_displayedMass, CurrentMass, Mathf.Clamp01(dt * 9f));
+                if (_wobbleAmplitude > 0.001f)
+                {
+                    _wobblePhase += dt * 22f;
+                    _wobbleAmplitude = Mathf.MoveTowards(_wobbleAmplitude, 0f, dt * 0.85f);
+                }
             }
             else
             {
-                float spread = 1.32f;
-                Vector3 leftPos = roadCenter + roadRight * (CurrentLateralOffset - spread) + roadUp * (radius + 0.02f);
-                Vector3 rightPos = roadCenter + roadRight * (CurrentLateralOffset + spread) + roadUp * (radius + 0.02f);
+                _currentSplitBlend = targetBlend;
+                _displayedMass = CurrentMass;
+            }
+
+            EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out Quaternion roadRot, out Vector3 roadRight);
+            Vector3 roadUp = roadRot * Vector3.up;
+
+            // Smoothly blend mass per sphere from 100% (unsplit) to 50% (fully split)
+            float effectiveSphereMass = Mathf.Lerp(_displayedMass, _displayedMass * 0.5f, _currentSplitBlend);
+            float radius = JellyMassModel.ComputeRadius(effectiveSphereMass, 100f, 0.52f);
+            float diameter = radius * 2f;
+
+            // Elastic squash & stretch during split/merge transition + wobble oscillation
+            float stretchPhase = 4f * _currentSplitBlend * (1f - _currentSplitBlend); // peaks at 1.0 when blend == 0.5
+            float wobble = Mathf.Sin(_wobblePhase) * _wobbleAmplitude;
+            float scaleX = diameter * (1f + stretchPhase * 0.38f + wobble);
+            float scaleY = diameter * Mathf.Max(0.55f, 1f - stretchPhase * 0.24f - wobble * 0.8f);
+            float scaleZ = diameter * (1f - stretchPhase * 0.12f + wobble * 0.4f);
+            Vector3 jellyScale = new Vector3(scaleX, scaleY, scaleZ);
+
+            if (primaryPlayer.massController != null)
+                primaryPlayer.massController.SetMassImmediate(effectiveSphereMass);
+
+            if (_currentSplitBlend <= 0.005f && !IsSplit)
+            {
+                Vector3 worldPos = roadCenter + roadRight * CurrentLateralOffset + roadUp * (scaleY * 0.5f + 0.02f);
+                primaryPlayer.transform.position = worldPos;
+                primaryPlayer.transform.localScale = jellyScale;
+                primaryPlayer.transform.Rotate(roadRight, forwardDelta * 110f, Space.World);
+
+                if (_secondarySplitVisual != null && _secondarySplitVisual.activeSelf)
+                    _secondarySplitVisual.SetActive(false);
+                if (_jellyBridgeVisual != null && _jellyBridgeVisual.activeSelf)
+                    _jellyBridgeVisual.SetActive(false);
+            }
+            else
+            {
+                // Smoothly ease the two halves apart (or together when merging)
+                float smoothT = Mathf.SmoothStep(0f, 1f, _currentSplitBlend);
+                float maxSpread = 1.32f;
+                float currentSpread = maxSpread * smoothT;
+
+                Vector3 centerWorld = roadCenter + roadRight * CurrentLateralOffset + roadUp * (scaleY * 0.5f + 0.02f);
+                Vector3 leftPos = centerWorld - roadRight * currentSpread;
+                Vector3 rightPos = centerWorld + roadRight * currentSpread;
 
                 primaryPlayer.transform.position = leftPos;
-                primaryPlayer.transform.localScale = Vector3.one * diameter;
+                primaryPlayer.transform.localScale = jellyScale;
                 primaryPlayer.transform.Rotate(roadRight, forwardDelta * 120f, Space.World);
 
                 if (_secondarySplitVisual != null)
                 {
                     if (!_secondarySplitVisual.activeSelf) _secondarySplitVisual.SetActive(true);
                     _secondarySplitVisual.transform.position = rightPos;
-                    _secondarySplitVisual.transform.localScale = Vector3.one * diameter;
+                    _secondarySplitVisual.transform.localScale = jellyScale;
                     _secondarySplitVisual.transform.rotation = primaryPlayer.transform.rotation;
+                }
+
+                // Render an elastic stretching jelly strand connecting the two halves during necking (blend < 0.72)
+                if (_jellyBridgeVisual != null)
+                {
+                    if (_currentSplitBlend > 0.01f && _currentSplitBlend < 0.72f)
+                    {
+                        if (!_jellyBridgeVisual.activeSelf) _jellyBridgeVisual.SetActive(true);
+                        float bridgeThickness = Mathf.Clamp01(1f - (_currentSplitBlend / 0.72f)) * diameter * 0.62f;
+                        _jellyBridgeVisual.transform.position = centerWorld;
+                        _jellyBridgeVisual.transform.rotation = roadRot;
+                        _jellyBridgeVisual.transform.localScale = new Vector3(currentSpread * 2.1f, bridgeThickness, bridgeThickness);
+                    }
+                    else if (_jellyBridgeVisual.activeSelf)
+                    {
+                        _jellyBridgeVisual.SetActive(false);
+                    }
                 }
             }
         }
@@ -323,12 +404,16 @@ namespace Jelly
             {
                 case EndlessPickupType.Grow:
                     CurrentMass = Mathf.Clamp(CurrentMass + amount, 25f, 220f);
+                    _wobbleAmplitude = 0.22f;
+                    _wobblePhase = 0f;
                     Score += 10;
                     SetBanner($"🟢 BÜYÜDÜN! (+{amount:F0} Kütle -> {CurrentMass:F0})", 2.0f);
                     break;
 
                 case EndlessPickupType.Shrink:
                     CurrentMass = Mathf.Clamp(CurrentMass - amount, 30f, 220f);
+                    _wobbleAmplitude = 0.20f;
+                    _wobblePhase = 0f;
                     Score += 10;
                     SetBanner($"🔴 KÜÇÜLDÜN! (-{amount:F0} Kütle -> {CurrentMass:F0})", 2.0f);
                     break;
@@ -337,6 +422,8 @@ namespace Jelly
                     if (!IsSplit)
                     {
                         IsSplit = true;
+                        _wobbleAmplitude = 0.28f;
+                        _wobblePhase = 0f;
                         Score += 15;
                         SetBanner("🟣 İKİYE BÖLÜNDÜN! (÷2) Orta direkli tünelden geçebilirsin!", 2.5f);
                     }
@@ -346,6 +433,8 @@ namespace Jelly
                     if (IsSplit)
                     {
                         IsSplit = false;
+                        _wobbleAmplitude = 0.26f;
+                        _wobblePhase = 0f;
                         Score += 15;
                         SetBanner("🟡 TEKRAR BİRLEŞTİN! (><) Tek büyük jöle oldun!", 2.5f);
                     }
