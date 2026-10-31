@@ -392,8 +392,8 @@ namespace Jelly.Editor
 
             string title = def != null ? $"{def.levelId.Replace('_', ' ')} — {def.displayName}" : "Level 01 — First Roll";
             var titleText = CreateLabel(hudPanel.transform, "LevelTitleLabel", title, new Vector2(0.5f, 0.94f));
-            var massText = CreateLabel(hudPanel.transform, "MassLabel", $"Mass: {(def != null ? def.startingMass : 100f):F0} | Parts: 1  [WASD/Drag: Roll | Space: Split | E: Merge | R: Restart]", new Vector2(0.5f, 0.88f));
-            var summaryText = CreateLabel(completePanel.transform, "SummaryLabel", "COMPLETED!", new Vector2(0.5f, 0.55f));
+            var massText = CreateLabel(hudPanel.transform, "MassLabel", $"Kütle: {(def != null ? def.startingMass : 100f):F0} | Parça: 1  [WASD: Hareket | Space: Bölün | E: Birleş | R: Yeniden | N/P: Bölüm Geç]", new Vector2(0.5f, 0.88f));
+            var summaryText = CreateLabel(completePanel.transform, "SummaryLabel", "BÖLÜM TAMAMLANDI! Sonraki bölüme geçiliyor...", new Vector2(0.5f, 0.55f));
 
             var uiMgr = canvasGo.AddComponent<JellyUIManager>();
             uiMgr.levelManager = lvlMgr;
@@ -428,12 +428,14 @@ namespace Jelly.Editor
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin = anchor;
             rt.anchorMax = anchor;
-            rt.sizeDelta = new Vector2(360f, 50f);
+            rt.sizeDelta = new Vector2(720f, 64f);
             var txt = go.AddComponent<Text>();
             txt.text = content;
             txt.alignment = TextAnchor.MiddleCenter;
+            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            txt.verticalOverflow = VerticalWrapMode.Overflow;
             txt.color = new Color(0.15f, 0.20f, 0.28f);
-            txt.fontSize = 18;
+            txt.fontSize = 16;
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             return txt;
         }

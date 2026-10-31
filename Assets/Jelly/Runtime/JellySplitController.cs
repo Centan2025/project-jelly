@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Jelly
 {
@@ -11,8 +12,8 @@ namespace Jelly
         public JellyFragmentInputRouter router;
         public float minFragmentMass = 20f;
         public float defaultSplitRatio = 0.5f;
-        public float splitImpulse = 3.2f;
-        public float splitCooldown = 0.45f;
+        public float splitImpulse = 1.8f;
+        public float splitCooldown = 0.25f;
         public int maxFragments = 2;
 
         public float LastSplitTime { get; set; } = -10f;
@@ -26,22 +27,23 @@ namespace Jelly
             if (primaryController == null) primaryController = GetComponent<JellyController>();
             if (registry == null)
             {
-                registry = FindAnyObjectByType<JellyFragmentRegistry>();
+                registry = GetComponent<JellyFragmentRegistry>() ?? FindAnyObjectByType<JellyFragmentRegistry>();
                 if (registry == null) registry = gameObject.AddComponent<JellyFragmentRegistry>();
             }
             if (pool == null)
             {
-                pool = FindAnyObjectByType<JellyFragmentPool>();
+                pool = GetComponent<JellyFragmentPool>() ?? FindAnyObjectByType<JellyFragmentPool>();
                 if (pool == null) pool = gameObject.AddComponent<JellyFragmentPool>();
             }
             if (router == null)
             {
-                router = FindAnyObjectByType<JellyFragmentInputRouter>();
+                router = GetComponent<JellyFragmentInputRouter>() ?? FindAnyObjectByType<JellyFragmentInputRouter>();
                 if (router == null) router = gameObject.AddComponent<JellyFragmentInputRouter>();
             }
 
             if (primaryController != null)
             {
+                primaryController.EnsureComponents();
                 var primaryFrag = primaryController.GetComponent<JellyFragment>();
                 if (primaryFrag == null) primaryFrag = primaryController.gameObject.AddComponent<JellyFragment>();
                 primaryFrag.FragmentId = 0;
@@ -53,7 +55,10 @@ namespace Jelly
 
         private void Update()
         {
-            if (primaryController != null && primaryController.inputAdapter != null && primaryController.inputAdapter.Current.SplitPressed)
+            var kb = Keyboard.current;
+            bool keySplit = kb != null && kb.spaceKey.wasPressedThisFrame && (primaryController == null || primaryController.inputAdapter == null || !primaryController.inputAdapter.overrideWithSimulatedInput);
+            bool adapterSplit = primaryController != null && primaryController.inputAdapter != null && primaryController.inputAdapter.Current.SplitPressed;
+            if (keySplit || adapterSplit)
                 TrySplit(defaultSplitRatio);
         }
 
@@ -85,11 +90,6 @@ namespace Jelly
             var secondFrag = pool.GetOrCreate(primaryController);
             secondFrag.FragmentId = 1;
 
-            var extraSplit = secondFrag.GetComponent<JellySplitController>();
-            if (extraSplit != null) { if (Application.isPlaying) Destroy(extraSplit); else DestroyImmediate(extraSplit); }
-            var extraMerge = secondFrag.GetComponent<JellyMergeController>();
-            if (extraMerge != null) { if (Application.isPlaying) Destroy(extraMerge); else DestroyImmediate(extraMerge); }
-
             primaryController.massController.SetMassImmediate(massA);
             secondFrag.MassController.SetMassImmediate(massB);
 
@@ -97,7 +97,7 @@ namespace Jelly
             float rB = secondFrag.MassController.CurrentRadius;
             Vector3 center = primaryController.transform.position;
             Vector3 right = Vector3.right;
-            float sep = (rA + rB) * 0.65f + 0.08f;
+            float sep = (rA + rB) * 0.7f + 0.1f;
 
             Vector3 posA = FindSafePosition(center - right * sep, rA);
             Vector3 posB = FindSafePosition(center + right * sep, rB);

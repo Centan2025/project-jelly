@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Jelly
@@ -14,6 +15,9 @@ namespace Jelly
         public Text levelTitleLabel;
         public Text completionSummaryLabel;
 
+        private string _rejectionHint;
+        private float _rejectionHintTimer;
+
         private void Start()
         {
             JellyMobileQualityManager.ApplyProfile(true);
@@ -22,6 +26,7 @@ namespace Jelly
             {
                 levelManager.OnLevelLoaded += HandleLevelLoaded;
                 levelManager.OnLevelCompleted += HandleLevelCompleted;
+                levelManager.OnGoalRejected += HandleGoalRejected;
                 if (levelManager.CurrentLevel != null)
                     HandleLevelLoaded(levelManager.CurrentLevel);
             }
@@ -34,11 +39,15 @@ namespace Jelly
             {
                 levelManager.OnLevelLoaded -= HandleLevelLoaded;
                 levelManager.OnLevelCompleted -= HandleLevelCompleted;
+                levelManager.OnGoalRejected -= HandleGoalRejected;
             }
         }
 
         private void Update()
         {
+            if (_rejectionHintTimer > 0f)
+                _rejectionHintTimer -= Time.deltaTime;
+
             if (levelManager != null && levelManager.ActivePlayer != null && massLabel != null)
             {
                 var reg = levelManager.ActivePlayer.GetComponent<JellyFragmentRegistry>();
@@ -46,16 +55,44 @@ namespace Jelly
                     ? reg.GetTotalActiveMass()
                     : levelManager.ActivePlayer.massController.CurrentMass;
                 int parts = reg != null && reg.ActiveCount > 0 ? reg.ActiveCount : 1;
-                massLabel.text = $"Mass: {m:F0} | Parts: {parts}  [WASD/Drag: Roll | Space: Split | E: Merge | R: Restart]";
+                float reqMass = levelManager.CurrentLevel != null ? levelManager.CurrentLevel.requiredMinMassAtGoal : 60f;
+                string baseStatus = $"Kütle: {m:F0} (Hedef: {reqMass:F0}+) | Parça: {parts}  [WASD: Hareket | Space: Bölün | E: Birleş | R: Yeniden | N/P: Bölüm Geç]";
+                massLabel.text = _rejectionHintTimer > 0f ? $"{baseStatus}\n⚠ {_rejectionHint}" : baseStatus;
             }
-            if (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.rKey.wasPressedThisFrame)
+
+            var kb = Keyboard.current;
+            if (kb != null)
             {
-                OnClickRestart();
+                if (kb.rKey.wasPressedThisFrame)
+                    OnClickRestart();
+                else if (kb.nKey.wasPressedThisFrame || kb.pageUpKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame)
+                    OnClickNextLevel();
+                else if (kb.pKey.wasPressedThisFrame || kb.pageDownKey.wasPressedThisFrame)
+                    OnClickPrevLevel();
+                else if (kb.digit1Key.wasPressedThisFrame) JumpToLevel(0);
+                else if (kb.digit2Key.wasPressedThisFrame) JumpToLevel(1);
+                else if (kb.digit3Key.wasPressedThisFrame) JumpToLevel(2);
+                else if (kb.digit4Key.wasPressedThisFrame) JumpToLevel(3);
+                else if (kb.digit5Key.wasPressedThisFrame) JumpToLevel(4);
+                else if (kb.digit6Key.wasPressedThisFrame) JumpToLevel(5);
+                else if (kb.digit7Key.wasPressedThisFrame) JumpToLevel(6);
+                else if (kb.digit8Key.wasPressedThisFrame) JumpToLevel(7);
+                else if (kb.digit9Key.wasPressedThisFrame) JumpToLevel(8);
+                else if (kb.digit0Key.wasPressedThisFrame) JumpToLevel(9);
             }
+        }
+
+        private void JumpToLevel(int index)
+        {
+            CancelInvoke(nameof(AutoAdvanceToNextLevel));
+            if (Application.isPlaying) Time.timeScale = 1f;
+            levelManager?.LoadLevelByIndex(index);
         }
 
         private void HandleLevelLoaded(JellyLevelDefinition def)
         {
+            CancelInvoke(nameof(AutoAdvanceToNextLevel));
+            _rejectionHintTimer = 0f;
             if (levelTitleLabel != null && def != null)
                 levelTitleLabel.text = $"{def.levelId.Replace('_', ' ')} — {def.displayName}";
             ShowHUD();
@@ -65,7 +102,22 @@ namespace Jelly
         {
             if (levelCompletePanel != null) levelCompletePanel.SetActive(true);
             if (completionSummaryLabel != null)
-                completionSummaryLabel.text = $"COMPLETED!\nTime: {res.ElapsedSeconds:F1}s | Mass: {res.FinalMass:F0} | Stars: {res.StarsEarned}/3";
+                completionSummaryLabel.text = $"BÖLÜM TAMAMLANDI! ({res.StarsEarned}/3 Yıldız)\nSüre: {res.ElapsedSeconds:F1}sn | Kütle: {res.FinalMass:F0}\nSonraki bölüme geçiliyor...";
+
+            CancelInvoke(nameof(AutoAdvanceToNextLevel));
+            if (Application.isPlaying)
+                Invoke(nameof(AutoAdvanceToNextLevel), 1.15f);
+        }
+
+        private void HandleGoalRejected(LevelCompletionResult res)
+        {
+            _rejectionHint = res.Reason;
+            _rejectionHintTimer = 2.5f;
+        }
+
+        private void AutoAdvanceToNextLevel()
+        {
+            OnClickNextLevel();
         }
 
         public void ShowMainMenu()
@@ -105,14 +157,23 @@ namespace Jelly
 
         public void OnClickRestart()
         {
-            Time.timeScale = 1f;
+            CancelInvoke(nameof(AutoAdvanceToNextLevel));
+            if (Application.isPlaying) Time.timeScale = 1f;
             levelManager?.RestartCurrentLevel();
         }
 
         public void OnClickNextLevel()
         {
-            Time.timeScale = 1f;
+            CancelInvoke(nameof(AutoAdvanceToNextLevel));
+            if (Application.isPlaying) Time.timeScale = 1f;
             levelManager?.LoadNextLevel();
+        }
+
+        public void OnClickPrevLevel()
+        {
+            CancelInvoke(nameof(AutoAdvanceToNextLevel));
+            if (Application.isPlaying) Time.timeScale = 1f;
+            levelManager?.LoadPreviousLevel();
         }
     }
 }

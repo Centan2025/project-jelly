@@ -23,6 +23,7 @@ namespace Jelly
 
         public event Action<JellyLevelDefinition> OnLevelLoaded;
         public event Action<LevelCompletionResult> OnLevelCompleted;
+        public event Action<LevelCompletionResult> OnGoalRejected;
 
         private void Awake()
         {
@@ -35,21 +36,23 @@ namespace Jelly
         private void Start()
         {
             if (levelCatalog == null || levelCatalog.Count == 0)
-                levelCatalog = JellyLevelCatalogFactory.CreateVerticalSlice10();
+                levelCatalog = JellyLevelCatalogFactory.CreateFullCatalog50();
 
             if (ActivePlayer == null)
+                ActivePlayer = FindAnyObjectByType<JellyController>();
+
+            if (ActivePlayer != null && CurrentLevel != null)
             {
-                var existingPlayer = FindAnyObjectByType<JellyController>();
-                if (existingPlayer != null && CurrentLevel != null)
-                {
-                    ActivePlayer = existingPlayer;
-                    checkpointManager.InitializeStart(CurrentLevel.startPosition, CurrentLevel.startingMass);
-                    ActivePlayer.OnFellIntoAbyss -= HandlePlayerAbyss;
-                    ActivePlayer.OnFellIntoAbyss += HandlePlayerAbyss;
-                    BindCamera(ActivePlayer);
-                    OnLevelLoaded?.Invoke(CurrentLevel);
-                    return;
-                }
+                ElapsedLevelTime = 0f;
+                IsLevelCompleted = false;
+                checkpointManager.InitializeStart(CurrentLevel.startPosition, CurrentLevel.startingMass);
+                ActivePlayer.OnFellIntoAbyss -= HandlePlayerAbyss;
+                ActivePlayer.OnFellIntoAbyss += HandlePlayerAbyss;
+                var split = ActivePlayer.GetComponent<JellySplitController>();
+                if (split != null) split.EnsureSetup();
+                BindCamera(ActivePlayer);
+                OnLevelLoaded?.Invoke(CurrentLevel);
+                return;
             }
 
             if (CurrentLevel == null && levelCatalog.Count > 0)
@@ -71,6 +74,11 @@ namespace Jelly
             if (checkpointManager == null) checkpointManager = GetComponent<CheckpointManager>() ?? gameObject.AddComponent<CheckpointManager>();
 
             CurrentLevel = def;
+            if (levelCatalog != null)
+            {
+                int idx = levelCatalog.IndexOf(def);
+                if (idx >= 0) currentLevelIndex = idx;
+            }
             ElapsedLevelTime = 0f;
             IsLevelCompleted = false;
             LastCompletionResult = default;
@@ -100,10 +108,10 @@ namespace Jelly
         public void LoadLevelByIndex(int index)
         {
             if (levelCatalog == null || levelCatalog.Count == 0)
-                levelCatalog = JellyLevelCatalogFactory.CreateVerticalSlice10();
+                levelCatalog = JellyLevelCatalogFactory.CreateFullCatalog50();
             currentLevelIndex = Mathf.Clamp(index, 0, levelCatalog.Count - 1);
             if (levelCatalog[currentLevelIndex] == null)
-                levelCatalog[currentLevelIndex] = JellyLevelCatalogFactory.CreateVerticalSlice10()[Mathf.Clamp(currentLevelIndex, 0, 9)];
+                levelCatalog[currentLevelIndex] = JellyLevelCatalogFactory.CreateFullCatalog50()[Mathf.Clamp(currentLevelIndex, 0, 49)];
             LoadLevel(levelCatalog[currentLevelIndex]);
         }
 
@@ -117,18 +125,20 @@ namespace Jelly
 
         public void LoadNextLevel()
         {
-            if (CurrentLevel != null && CurrentLevel.nextLevelReference != null)
-            {
-                int idx = levelCatalog.IndexOf(CurrentLevel.nextLevelReference);
-                if (idx >= 0) currentLevelIndex = idx;
-                LoadLevel(CurrentLevel.nextLevelReference);
-                return;
-            }
-            if (levelCatalog.Count > 0)
-            {
-                currentLevelIndex = (currentLevelIndex + 1) % levelCatalog.Count;
-                LoadLevelByIndex(currentLevelIndex);
-            }
+            if (levelCatalog == null || levelCatalog.Count == 0)
+                levelCatalog = JellyLevelCatalogFactory.CreateFullCatalog50();
+
+            currentLevelIndex = (currentLevelIndex + 1) % levelCatalog.Count;
+            LoadLevelByIndex(currentLevelIndex);
+        }
+
+        public void LoadPreviousLevel()
+        {
+            if (levelCatalog == null || levelCatalog.Count == 0)
+                levelCatalog = JellyLevelCatalogFactory.CreateFullCatalog50();
+
+            currentLevelIndex = (currentLevelIndex - 1 + levelCatalog.Count) % levelCatalog.Count;
+            LoadLevelByIndex(currentLevelIndex);
         }
 
         private void HandlePlayerAbyss(JellyController player)
@@ -152,6 +162,10 @@ namespace Jelly
                 IsLevelCompleted = true;
                 ProgressionService?.RecordCompletion(CurrentLevel, res);
                 OnLevelCompleted?.Invoke(res);
+            }
+            else
+            {
+                OnGoalRejected?.Invoke(res);
             }
             return res;
         }

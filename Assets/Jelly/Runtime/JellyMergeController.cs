@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Jelly
 {
@@ -10,20 +11,42 @@ namespace Jelly
         public JellyFragmentPool pool;
         public float mergeDistancePadding = 0.35f;
         public float maxRelativeSpeed = 9f;
-        public float minTimeSinceSplit = 0.55f;
-        public bool autoMergeOnProximity = true;
+        public float minTimeSinceSplit = 1.2f;
+        public bool autoMergeOnProximity = false;
 
         public event Action<JellyFragment, float> OnMerged;
 
-        private void Awake()
+        private void Awake() => EnsureComponents();
+
+        private void EnsureComponents()
         {
             if (splitController == null) splitController = GetComponent<JellySplitController>();
-            if (registry == null) registry = GetComponent<JellyFragmentRegistry>();
-            if (pool == null) pool = GetComponent<JellyFragmentPool>();
+            if (registry == null) registry = GetComponent<JellyFragmentRegistry>() ?? (splitController != null ? splitController.registry : null);
+            if (pool == null) pool = GetComponent<JellyFragmentPool>() ?? (splitController != null ? splitController.pool : null);
+        }
+
+        private void Update()
+        {
+            EnsureComponents();
+            if (splitController != null) splitController.EnsureSetup();
+            if (registry == null || registry.ActiveCount < 2) return;
+
+            var kb = Keyboard.current;
+            bool keyMerge = kb != null && (kb.eKey.wasPressedThisFrame || kb.mKey.wasPressedThisFrame);
+            bool adapterMerge = splitController != null
+                                && splitController.primaryController != null
+                                && splitController.primaryController.inputAdapter != null
+                                && splitController.primaryController.inputAdapter.Current.MergePressed;
+
+            if (keyMerge || adapterMerge)
+            {
+                TryMergeIfEligible(forceMergeByDistance: true);
+            }
         }
 
         private void FixedUpdate()
         {
+            EnsureComponents();
             if (splitController == null || registry == null || registry.ActiveCount < 2) return;
             bool manualReq = splitController.primaryController != null
                              && splitController.primaryController.inputAdapter != null
@@ -33,9 +56,13 @@ namespace Jelly
                 TryMergeIfEligible(manualReq);
         }
 
-        public bool CanMerge(JellyFragment a, JellyFragment b, bool ignoreVelocity = false)
+        public bool CanMerge(JellyFragment a, JellyFragment b, bool forceMergeByDistance = false)
         {
             if (a == null || b == null || a == b || !a.IsActiveFragment || !b.IsActiveFragment) return false;
+
+            if (forceMergeByDistance)
+                return true;
+
             if (splitController != null && Time.time - splitController.LastSplitTime < minTimeSinceSplit) return false;
 
             float rA = a.MassController != null ? a.MassController.CurrentRadius : 0.5f;
@@ -43,7 +70,7 @@ namespace Jelly
             float dist = Vector3.Distance(a.transform.position, b.transform.position);
             if (dist > rA + rB + mergeDistancePadding) return false;
 
-            if (!ignoreVelocity && a.PhysicsBody?.Body != null && b.PhysicsBody?.Body != null)
+            if (a.PhysicsBody?.Body != null && b.PhysicsBody?.Body != null)
             {
                 float relSpeed = (a.PhysicsBody.Body.linearVelocity - b.PhysicsBody.Body.linearVelocity).magnitude;
                 if (relSpeed > maxRelativeSpeed) return false;
@@ -53,6 +80,8 @@ namespace Jelly
 
         public bool TryMergeIfEligible(bool forceMergeByDistance = false)
         {
+            EnsureComponents();
+            if (splitController != null) splitController.EnsureSetup();
             if (registry == null || registry.ActiveCount < 2) return false;
             var a = registry.ActiveFragments[0];
             var b = registry.ActiveFragments[1];
@@ -78,6 +107,9 @@ namespace Jelly
 
             float newRadius = JellyMassModel.ComputeRadius(mergedMass, primary.MassController.Model.BaseMass, primary.MassController.Model.BaseRadius);
             Vector3 safePos = JellySplitController.FindSafePosition(mid, newRadius);
+
+            if (primary.Controller.inputAdapter != null)
+                primary.Controller.inputAdapter.ClearSimulatedInput();
 
             primary.Controller.ResetState(safePos, Quaternion.identity, mergedMass);
             if (primary.PhysicsBody.Body != null)

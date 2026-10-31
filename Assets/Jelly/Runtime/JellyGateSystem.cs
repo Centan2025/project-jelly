@@ -115,6 +115,7 @@ namespace Jelly
             float maxVert = massController != null && massController.config != null ? massController.config.maxVerticalCompressionRatio : 0.65f;
             var rb = massController != null ? massController.GetComponent<Rigidbody>() : null;
             var frag = massController != null ? massController.GetComponent<JellyFragment>() : null;
+            var reg = massController != null ? (massController.GetComponent<JellyFragmentRegistry>() ?? JellyFragmentRegistry.Instance ?? FindAnyObjectByType<JellyFragmentRegistry>()) : JellyFragmentRegistry.Instance;
             return new GateCandidateState
             {
                 Mass = mass,
@@ -123,8 +124,28 @@ namespace Jelly
                 MaxVerticalCompressionRatio = maxVert,
                 ApproachSpeed = rb != null ? rb.linearVelocity.magnitude : 0f,
                 IsFragment = frag != null && frag.IsActiveFragment,
-                ActiveFragmentCount = JellyFragmentRegistry.Instance != null ? JellyFragmentRegistry.Instance.ActiveCount : 1
+                ActiveFragmentCount = reg != null && reg.ActiveCount > 0 ? reg.ActiveCount : 1
             };
+        }
+
+        protected virtual void FixedUpdate()
+        {
+            var reg = JellyFragmentRegistry.Instance ?? FindAnyObjectByType<JellyFragmentRegistry>();
+            if (reg != null && reg.ActiveCount > 0)
+            {
+                for (int i = 0; i < reg.ActiveFragments.Count; i++)
+                {
+                    var f = reg.ActiveFragments[i];
+                    if (f != null && f.MassController != null)
+                    {
+                        float dz = Mathf.Abs(f.transform.position.z - transform.position.z);
+                        if (dz < 2.2f)
+                        {
+                            TryProcessCandidate(f.MassController);
+                        }
+                    }
+                }
+            }
         }
 
         public bool TryProcessCandidate(JellyMassController massController)
