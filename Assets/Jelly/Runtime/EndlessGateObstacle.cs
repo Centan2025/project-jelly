@@ -19,6 +19,7 @@ namespace Jelly
         public float minRequiredMassForSmash = 125f;
         public Transform breakableCenterPiece;
         public bool resolved;
+        public bool hasBouncedOnce;
 
         public void ShatterBreakablePiece()
         {

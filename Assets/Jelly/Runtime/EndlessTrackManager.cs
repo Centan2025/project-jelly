@@ -523,12 +523,18 @@ namespace Jelly
                 {
                     if (IsSplit)
                     {
-                        // One piece can pass if aligned with hole, or one piece is lost and player continues as single!
-                        bool leftInHole = Mathf.Abs(leftPieceX) <= 0.85f;
-                        bool rightInHole = Mathf.Abs(rightPieceX) <= 0.85f;
-                        SacrificeOneSplitPieceAndContinue(obs, leftInHole || rightInHole
-                            ? "⚠ TEK DELİK! Parçalardan biri geçti, diğeri duvarda kaldı!"
-                            : "💥 PARÇALARDAN BİRİ DUVARA ÇARPTI! Tek parçayla devam ediyorsun!");
+                        bool leftInHole = Mathf.Abs(leftPieceX) <= 0.88f;
+                        bool rightInHole = Mathf.Abs(rightPieceX) <= 0.88f;
+                        if (leftInHole || rightInHole)
+                        {
+                            float survivingX = leftInHole ? leftPieceX : rightPieceX;
+                            SacrificeOneSplitPieceAndContinue(obs, survivingX,
+                                "⚠ TEK DELİK! Açıklıktan geçen parçayla devam ediyorsun (-%50 Kütle)!");
+                        }
+                        else
+                        {
+                            TriggerObstacleCrash(obs, "💥 İKİ PARÇA DA DUVARA ÇARPTI (-30 Kütle)! Ortadaki deliğe hizalan!");
+                        }
                         return;
                     }
 
@@ -543,8 +549,8 @@ namespace Jelly
                     else
                     {
                         string reason = !alignedCenter
-                            ? "💥 DUVARA ÇARPTIN (-25 Kütle)! Ortadaki deliğe hizalan!"
-                            : $"💥 DELİK İÇİN BÜYÜKTÜN (-25 Kütle)! Kırmızı (-) yakalayıp küçülmeliydin!";
+                            ? "💥 DUVARA ÇARPTIN (-30 Kütle)! Ortadaki deliğe yönel!"
+                            : "💥 DELİK İÇİN BÜYÜKTÜN (-30 Kütle)! Kırmızı (-) yakalayıp küçülmeliydin!";
                         TriggerObstacleCrash(obs, reason);
                     }
                     break;
@@ -554,30 +560,52 @@ namespace Jelly
                 {
                     if (IsSplit)
                     {
-                        // Forgiving check: if roughly centered, both pass; if way off to one side, 1 piece passes and 1 piece splats!
-                        if (Mathf.Abs(CurrentLateralOffset) <= 1.35f)
+                        // Left tunnel center is around -1.35, Right tunnel center is around +1.35
+                        bool leftInTunnel = leftPieceX >= -2.35f && leftPieceX <= -0.45f;
+                        bool rightInTunnel = rightPieceX >= 0.45f && rightPieceX <= 2.35f;
+
+                        if (leftInTunnel && rightInTunnel)
                         {
                             obs.resolved = true;
                             Score += 35;
                             SetBanner("✓ İKİLİ TÜNELDEN BÖLÜNEREK GEÇTİN! (+35 Puan)", 2.2f);
                         }
+                        else if (leftInTunnel || rightInTunnel)
+                        {
+                            // Or one piece went through one of the tunnels while the other hit a wall
+                            float survivingX = leftInTunnel ? leftPieceX : rightPieceX;
+                            SacrificeOneSplitPieceAndContinue(obs, survivingX,
+                                "⚠ PARÇALARDAN BİRİ DUVARA ÇARPTI! Tünelden geçen parçayla devam (-%50 Kütle)!");
+                        }
                         else
                         {
-                            SacrificeOneSplitPieceAndContinue(obs, "⚠ YANA KAYDIN! Parçalardan biri direğe çarptı, kalan parçayla devam ediyorsun!");
+                            // Check if at least one piece entered the opposite tunnel when way off-center
+                            bool leftInRightTunnel = leftPieceX >= 0.45f && leftPieceX <= 2.35f;
+                            bool rightInLeftTunnel = rightPieceX >= -2.35f && rightPieceX <= -0.45f;
+                            if (leftInRightTunnel || rightInLeftTunnel)
+                            {
+                                float survivingX = leftInRightTunnel ? leftPieceX : rightPieceX;
+                                SacrificeOneSplitPieceAndContinue(obs, survivingX,
+                                    "⚠ SADECE TEK PARÇA TÜNELE GİRDİ! Kalan parçayla devam (-%50 Kütle)!");
+                            }
+                            else
+                            {
+                                TriggerObstacleCrash(obs, "💥 İKİ PARÇA DA DİREĞE ÇARPTI (-30 Kütle)! Tünellere hizalan!");
+                            }
                         }
                     }
                     else
                     {
                         // Unsplit jelly: if steered into left or right tunnel (-1.45 or +1.45) and small enough, let it pass!
-                        if (Mathf.Abs(CurrentLateralOffset) >= 0.75f && CurrentMass <= 85f)
+                        if (Mathf.Abs(CurrentLateralOffset) >= 0.72f && CurrentMass <= 90f)
                         {
                             obs.resolved = true;
                             Score += 25;
-                            SetBanner("✓ YAN TÜNELDEN GEÇTİN! (+25 Puan)", 2.0f);
+                            SetBanner("✓ YAN TÜNELDEN TEK PARÇA GEÇTİN! (+25 Puan)", 2.0f);
                         }
                         else
                         {
-                            TriggerObstacleCrash(obs, "💥 ORTADAKİ DİREĞE ÇARPTIN (-25 Kütle)! Mor (÷2) yakalayıp bölünmeliydin!");
+                            TriggerObstacleCrash(obs, "💥 ORTADAKİ DİREĞE ÇARPTIN (-30 Kütle)! Mor (÷2) alıp bölün veya yan tünele kaç!");
                         }
                     }
                     break;
@@ -587,7 +615,18 @@ namespace Jelly
                 {
                     if (IsSplit)
                     {
-                        SacrificeOneSplitPieceAndContinue(obs, "💥 DUVARA BÖLÜNMÜŞ ÇARPTIN! Parçalardan biri kırıldı, tek parçayla devam!");
+                        if (CurrentMass >= obs.minRequiredMassForSmash)
+                        {
+                            obs.resolved = true;
+                            obs.ShatterBreakablePiece();
+                            Score += 35;
+                            SetBanner("💥 İKİ PARÇAYLA DUVARI KIRDIN! (+35 Puan)", 2.2f);
+                        }
+                        else
+                        {
+                            SacrificeOneSplitPieceAndContinue(obs, CurrentLateralOffset,
+                                "💥 BÖLÜNMÜŞ JÖLE DUVARA HAFİF GELDİ! Bir parça feda edildi (-%50 Kütle)!");
+                        }
                         return;
                     }
 
@@ -602,7 +641,7 @@ namespace Jelly
                     }
                     else
                     {
-                        TriggerObstacleCrash(obs, $"💥 DUVARI KIRAMADIN (-25 Kütle)! Yeşil (+) toplayıp büyümeliydin!");
+                        TriggerObstacleCrash(obs, "💥 DUVARI KIRAMADIN (-30 Kütle)! Yeşil (+) toplayıp büyümeliydin!");
                     }
                     break;
                 }
@@ -611,14 +650,27 @@ namespace Jelly
                 {
                     if (IsSplit)
                     {
-                        bool leftPassed = leftPieceX <= -0.65f;
-                        SacrificeOneSplitPieceAndContinue(obs, leftPassed
-                            ? "✓ SOL PARÇA AÇIKLIKTAN GEÇTİ, sağ parça duvarda kaldı!"
-                            : "💥 SAĞ TARAF KAPALIYDI! Tek parçayla devam ediyorsun!");
+                        bool leftPassed = leftPieceX <= -0.55f;
+                        bool rightPassed = rightPieceX <= -0.55f;
+                        if (leftPassed && rightPassed)
+                        {
+                            obs.resolved = true;
+                            Score += 30;
+                            SetBanner("✓ İKİ PARÇA DA SOL AÇIKLIKTAN GEÇTİ! (+30 Puan)", 2.0f);
+                        }
+                        else if (leftPassed)
+                        {
+                            SacrificeOneSplitPieceAndContinue(obs, leftPieceX,
+                                "⚠ SAĞ PARÇA DUVARA ÇARPTI! Sol açıklıktan geçen parçayla devam (-%50 Kütle)!");
+                        }
+                        else
+                        {
+                            TriggerObstacleCrash(obs, "💥 SAĞ TARAF KAPALI (-30 Kütle)! Sola kaç!");
+                        }
                         return;
                     }
 
-                    if (CurrentLateralOffset <= -0.65f)
+                    if (CurrentLateralOffset <= -0.60f)
                     {
                         obs.resolved = true;
                         Score += 25;
@@ -626,7 +678,7 @@ namespace Jelly
                     }
                     else
                     {
-                        TriggerObstacleCrash(obs, "💥 SAĞ TARAF KAPALI (-25 Kütle)! Sol açıklıktan geçmeliydin!");
+                        TriggerObstacleCrash(obs, "💥 SAĞ TARAF KAPALI (-30 Kütle)! Sol açıklığa yönel!");
                     }
                     break;
                 }
@@ -635,14 +687,27 @@ namespace Jelly
                 {
                     if (IsSplit)
                     {
-                        bool rightPassed = rightPieceX >= 0.65f;
-                        SacrificeOneSplitPieceAndContinue(obs, rightPassed
-                            ? "✓ SAĞ PARÇA AÇIKLIKTAN GEÇTİ, sol parça duvarda kaldı!"
-                            : "💥 SOL TARAF KAPALIYDI! Tek parçayla devam ediyorsun!");
+                        bool leftPassed = leftPieceX >= 0.55f;
+                        bool rightPassed = rightPieceX >= 0.55f;
+                        if (leftPassed && rightPassed)
+                        {
+                            obs.resolved = true;
+                            Score += 30;
+                            SetBanner("✓ İKİ PARÇA DA SAĞ AÇIKLIKTAN GEÇTİ! (+30 Puan)", 2.0f);
+                        }
+                        else if (rightPassed)
+                        {
+                            SacrificeOneSplitPieceAndContinue(obs, rightPieceX,
+                                "⚠ SOL PARÇA DUVARA ÇARPTI! Sağ açıklıktan geçen parçayla devam (-%50 Kütle)!");
+                        }
+                        else
+                        {
+                            TriggerObstacleCrash(obs, "💥 SOL TARAF KAPALI (-30 Kütle)! Sağa kaç!");
+                        }
                         return;
                     }
 
-                    if (CurrentLateralOffset >= 0.65f)
+                    if (CurrentLateralOffset >= 0.60f)
                     {
                         obs.resolved = true;
                         Score += 25;
@@ -650,36 +715,109 @@ namespace Jelly
                     }
                     else
                     {
-                        TriggerObstacleCrash(obs, "💥 SOL TARAF KAPALI (-25 Kütle)! Sağ açıklıktan geçmeliydin!");
+                        TriggerObstacleCrash(obs, "💥 SOL TARAF KAPALI (-30 Kütle)! Sağ açıklığa yönel!");
                     }
                     break;
                 }
             }
         }
 
-        private void SacrificeOneSplitPieceAndContinue(EndlessGateObstacle obs, string message)
+        private void SacrificeOneSplitPieceAndContinue(EndlessGateObstacle obs, float survivingLateralX, string message)
         {
             obs.resolved = true;
             obs.ShatterBreakablePiece();
             IsSplit = false;
-            CurrentMass = Mathf.Max(40f, CurrentMass * 0.55f);
+            CurrentLateralOffset = Mathf.Clamp(survivingLateralX, -maxLateralOffset, maxLateralOffset);
+            _currentSplitBlend = 0f;
+            CurrentMass *= 0.5f;
             _displayedMass = CurrentMass;
-            _wobbleAmplitude = 0.30f;
+            _wobbleAmplitude = 0.32f;
             _wobblePhase = 0f;
-            _bounceCooldown = 0.18f;
+            _bounceCooldown = 0.12f;
+
+            if (CurrentMass < 20f)
+            {
+                TriggerGameOver("💥 JÖLE ÇOK KÜÇÜLDÜ VE ERİDİ! (Kütle Tükendi)");
+                return;
+            }
             SetBanner(message, 2.8f);
         }
 
         private void TriggerObstacleCrash(EndlessGateObstacle obs, string reason)
         {
-            // Always mark obstacle resolved and break it so the player NEVER gets stuck on an obstacle!
-            obs.resolved = true;
-            obs.ShatterBreakablePiece();
-            _bounceCooldown = 0.22f;
-            _wobbleAmplitude = 0.32f;
+            _wobbleAmplitude = 0.35f;
             _wobblePhase = 0f;
-            CurrentMass = Mathf.Max(35f, CurrentMass - 25f);
-            SetBanner(reason, 3.0f);
+            CurrentMass -= 30f;
+
+            if (CurrentMass < 20f)
+            {
+                obs.resolved = true;
+                obs.ShatterBreakablePiece();
+                TriggerGameOver("💥 JÖLE DUVARDA PARÇALANDI! (Kütle Bitti)");
+                return;
+            }
+
+            // First hit on an obstacle: bounce back slightly so player can steer into the opening!
+            // If they hit the same obstacle a second time, shatter it so they never get permanently stuck.
+            if (!obs.hasBouncedOnce)
+            {
+                obs.hasBouncedOnce = true;
+                _bounceCooldown = 0.38f;
+                SetBanner(reason + " (Hizalanıp geç!)", 3.0f);
+            }
+            else
+            {
+                obs.resolved = true;
+                obs.ShatterBreakablePiece();
+                _bounceCooldown = 0.18f;
+                SetBanner(reason + " (Duvar kırıldı!)", 2.8f);
+            }
+        }
+
+        private void TriggerGameOver(string reason)
+        {
+            IsGameOver = true;
+            CurrentMass = 0f;
+            _displayedMass = 10f;
+            SetBanner($"{reason} — [SPACE veya Sol Tık ile Yeniden Başla]", 999f);
+        }
+
+        private void OnGUI()
+        {
+            if (!IsGameOver) return;
+
+            float w = 520f;
+            float h = 210f;
+            Rect boxRect = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+
+            GUI.color = new Color(0.08f, 0.10f, 0.16f, 0.94f);
+            GUI.Box(boxRect, GUIContent.none);
+            GUI.color = Color.white;
+
+            GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 26,
+                fontStyle = FontStyle.Bold
+            };
+            titleStyle.normal.textColor = new Color(1f, 0.38f, 0.42f);
+
+            GUIStyle bodyStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 17,
+                wordWrap = true
+            };
+            bodyStyle.normal.textColor = Color.white;
+
+            GUI.Label(new Rect(boxRect.x + 20f, boxRect.y + 18f, w - 40f, 40f), "OYUN BİTTİ!", titleStyle);
+            GUI.Label(new Rect(boxRect.x + 25f, boxRect.y + 62f, w - 50f, 65f),
+                $"{StatusBanner}\nMesafe: {CurrentDistance:F0}m   |   Toplam Skor: {Score}", bodyStyle);
+
+            if (GUI.Button(new Rect(boxRect.x + (w - 220f) * 0.5f, boxRect.y + 142f, 220f, 46f), "TEKRAR OYNA (Space / R)"))
+            {
+                StartNewEndlessRun();
+            }
         }
 
         private void SetBanner(string msg, float duration)
