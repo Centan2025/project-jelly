@@ -57,6 +57,7 @@ namespace Jelly
 
         private readonly List<GameObject> _spawnedChunks = new List<GameObject>();
         private readonly List<EndlessGateObstacle> _activeObstacles = new List<EndlessGateObstacle>();
+        private readonly List<EndlessPickupItem> _activePickups = new List<EndlessPickupItem>();
 
         private void Awake()
         {
@@ -188,6 +189,7 @@ namespace Jelly
             EnsureTrackRoot();
             _spawnedChunks.Clear();
             _activeObstacles.Clear();
+            _activePickups.Clear();
             for (int i = trackRoot.childCount - 1; i >= 0; i--)
             {
                 var ch = trackRoot.GetChild(i);
@@ -288,7 +290,10 @@ namespace Jelly
             // 3. Position & animate Jelly (single or split twin) on the 3D spline road
             SyncJellyVisualsAndPosition(dt * speed);
 
-            // 4. Evaluate cutout obstacles as player crosses their Z plane
+            // 4. Check pickup collection for both primary and secondary split pieces
+            CheckPickups();
+
+            // 5. Evaluate cutout obstacles as player crosses their Z plane
             CheckObstacles();
 
             // 5. Generate new curved road slices & obstacles ahead, cleanup behind
@@ -439,6 +444,36 @@ namespace Jelly
                         SetBanner("🟡 TEKRAR BİRLEŞTİN! (><) Tek büyük jöle oldun!", 2.5f);
                     }
                     break;
+            }
+        }
+
+        private void CheckPickups()
+        {
+            if (primaryPlayer == null) return;
+
+            float singleMass = IsSplit ? _displayedMass * 0.5f : _displayedMass;
+            float jellyRadius = JellyMassModel.ComputeRadius(singleMass, 100f, 0.52f);
+            float catchRadius = jellyRadius + 0.68f;
+
+            Vector3 posA = primaryPlayer.transform.position;
+            bool hasTwin = (IsSplit || _currentSplitBlend > 0.15f) && _secondarySplitVisual != null && _secondarySplitVisual.activeSelf;
+            Vector3 posB = hasTwin ? _secondarySplitVisual.transform.position : posA;
+            Vector3 midPos = (posA + posB) * 0.5f;
+
+            for (int i = 0; i < _activePickups.Count; i++)
+            {
+                var p = _activePickups[i];
+                if (p == null || p.IsConsumed || !p.gameObject.activeInHierarchy) continue;
+
+                Vector3 pPos = p.transform.position;
+                bool hitA = (pPos - posA).sqrMagnitude <= catchRadius * catchRadius;
+                bool hitB = hasTwin && (pPos - posB).sqrMagnitude <= catchRadius * catchRadius;
+                bool hitMid = hasTwin && p.pickupType == EndlessPickupType.Merge && (pPos - midPos).sqrMagnitude <= (catchRadius + 0.65f) * (catchRadius + 0.65f);
+
+                if (hitA || hitB || hitMid)
+                {
+                    p.TryCollect(this);
+                }
             }
         }
 
@@ -747,6 +782,7 @@ namespace Jelly
             item.pickupType = type;
             item.amount = amount;
             _spawnedChunks.Add(go);
+            _activePickups.Add(item);
         }
 
         private void BuildCutoutGate(float z, EndlessObstacleType type)
@@ -846,6 +882,11 @@ namespace Jelly
             {
                 if (_activeObstacles[i] == null || _activeObstacles[i].trackZ < cutoffZ)
                     _activeObstacles.RemoveAt(i);
+            }
+            for (int i = _activePickups.Count - 1; i >= 0; i--)
+            {
+                if (_activePickups[i] == null || _activePickups[i].transform.position.z < cutoffZ)
+                    _activePickups.RemoveAt(i);
             }
         }
 
