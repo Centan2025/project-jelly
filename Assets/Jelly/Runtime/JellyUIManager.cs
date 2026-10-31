@@ -52,13 +52,10 @@ namespace Jelly
 
             if (endlessManager != null && endlessManager.enabled)
             {
-                if (levelTitleLabel != null)
-                    levelTitleLabel.text = $"SONSUZ JÖLE KOŞUSU — Mesafe: {endlessManager.CurrentDistance:F0}m | Skor: {endlessManager.Score}";
-                if (massLabel != null)
-                {
-                    string stateStr = endlessManager.IsSplit ? "2 Parça (Bölünmüş ÷2)" : "Tek Parça";
-                    massLabel.text = $"Kütle: {endlessManager.CurrentMass:F0} | Durum: {stateStr}\n{endlessManager.StatusBanner}";
-                }
+                if (hudPanel != null && hudPanel.activeSelf)
+                    hudPanel.SetActive(false);
+                if (mainMenuPanel != null && mainMenuPanel.activeSelf)
+                    mainMenuPanel.SetActive(false);
                 return;
             }
 

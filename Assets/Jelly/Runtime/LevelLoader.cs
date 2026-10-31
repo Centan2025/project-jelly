@@ -236,22 +236,42 @@ namespace Jelly
             return go;
         }
 
+        private static readonly Dictionary<Color32, Material> _colorMaterialCache = new Dictionary<Color32, Material>();
+
         public static void ApplyMaterialOrColor(GameObject go, Material sharedMat, Color c)
         {
+            if (go == null) return;
             var r = go.GetComponent<Renderer>();
-            if (r == null) return;
-            if (sharedMat != null)
+            if (r == null)
             {
-                r.sharedMaterial = sharedMat;
+                var childVis = go.transform.Find("Visual");
+                if (childVis != null) r = childVis.GetComponent<Renderer>();
+            }
+            if (r == null) return;
+
+            if (!Application.isPlaying)
+            {
+                if (sharedMat != null) r.sharedMaterial = sharedMat;
                 return;
             }
-            Shader sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            if (sh != null && Application.isPlaying)
+
+            Color32 key = c;
+            if (!_colorMaterialCache.TryGetValue(key, out Material mat) || mat == null)
             {
-                var mat = new Material(sh) { color = c };
+                Shader sh = (sharedMat != null && sharedMat.shader != null)
+                    ? sharedMat.shader
+                    : (Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+                if (sh == null) return;
+
+                mat = sharedMat != null ? new Material(sharedMat) : new Material(sh);
+                mat.color = c;
                 if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
-                r.material = mat;
+                if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.76f);
+                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.76f);
+                _colorMaterialCache[key] = mat;
             }
+
+            r.sharedMaterial = mat;
         }
 
         public JellyController SpawnPlayer(Vector3 pos, Quaternion rot, float startingMass)
