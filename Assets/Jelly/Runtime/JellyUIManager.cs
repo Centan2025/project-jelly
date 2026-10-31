@@ -7,6 +7,7 @@ namespace Jelly
     public class JellyUIManager : MonoBehaviour
     {
         public LevelManager levelManager;
+        public EndlessTrackManager endlessManager;
         public GameObject mainMenuPanel;
         public GameObject hudPanel;
         public GameObject pausePanel;
@@ -21,6 +22,7 @@ namespace Jelly
         private void Start()
         {
             JellyMobileQualityManager.ApplyProfile(true);
+            if (endlessManager == null) endlessManager = FindAnyObjectByType<EndlessTrackManager>();
             if (levelManager == null) levelManager = FindAnyObjectByType<LevelManager>();
             if (levelManager != null)
             {
@@ -45,6 +47,21 @@ namespace Jelly
 
         private void Update()
         {
+            if (endlessManager == null)
+                endlessManager = FindAnyObjectByType<EndlessTrackManager>();
+
+            if (endlessManager != null && endlessManager.enabled)
+            {
+                if (levelTitleLabel != null)
+                    levelTitleLabel.text = $"SONSUZ JÖLE KOŞUSU — Mesafe: {endlessManager.CurrentDistance:F0}m | Skor: {endlessManager.Score}";
+                if (massLabel != null)
+                {
+                    string stateStr = endlessManager.IsSplit ? "2 Parça (Bölünmüş ÷2)" : "Tek Parça";
+                    massLabel.text = $"Kütle: {endlessManager.CurrentMass:F0} | Durum: {stateStr}\n{endlessManager.StatusBanner}";
+                }
+                return;
+            }
+
             if (_rejectionHintTimer > 0f)
                 _rejectionHintTimer -= Time.deltaTime;
 

@@ -38,7 +38,8 @@ namespace Jelly.Editor
             if (EditorApplication.isPlayingOrWillChangePlaymode || Application.isPlaying || BuildPipeline.isBuildingPlayer) return;
             var root = GameObject.Find("LevelRuntimeRoot");
             var player = GameObject.Find("JellyPlayer");
-            if (root == null || player == null)
+            var curvedSlice = GameObject.Find("RoadSlice_0");
+            if (root == null || player == null || curvedSlice == null)
             {
                 var sampleAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/SampleScene.unity");
                 var lvl01 = AssetDatabase.LoadAssetAtPath<JellyLevelDefinition>($"{LevelsDir}/Level_01.asset");
@@ -49,7 +50,7 @@ namespace Jelly.Editor
                 if (!Application.isBatchMode)
                 {
                     EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
-                    if (GameObject.Find("LevelRuntimeRoot") == null)
+                    if (GameObject.Find("RoadSlice_0") == null)
                     {
                         GenerateAll();
                         EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
@@ -358,6 +359,23 @@ namespace Jelly.Editor
                     Debug.LogError($"[JellyProjectBuilder] LoadLevel failed in {path}: {ex}");
                 }
 
+                // Enable Endless Winding Track + Cutout Gates + Pickup-driven Split/Grow/Shrink on SampleScene, MainMenu, and Level_01
+                if (startIndex == 0)
+                {
+                    lvlMgr.enabled = false;
+                    var endless = sysGo.AddComponent<EndlessTrackManager>();
+                    endless.trackRoot = loader.levelRoot;
+                    endless.primaryPlayer = lvlMgr.ActivePlayer;
+                    endless.mainCamera = cam;
+                    endless.jellyMaterial = jellyMat;
+                    endless.trackMaterial = trackMat;
+                    endless.gateMaterial = gateMat;
+                    endless.goalMaterial = goalMat;
+                    endless.pickupMaterial = pickupMat;
+                    endless.drainMaterial = drainMat;
+                    endless.BuildInitialPreviewInEditor(lvlMgr.ActivePlayer);
+                }
+
                 BuildSceneUI(lvlMgr, activeDef, startInMainMenu);
             }
 
@@ -390,9 +408,15 @@ namespace Jelly.Editor
             var pausePanel = CreatePanel(safeRoot.transform, "PausePanel");
             var completePanel = CreatePanel(safeRoot.transform, "LevelCompletePanel");
 
-            string title = def != null ? $"{def.levelId.Replace('_', ' ')} — {def.displayName}" : "Level 01 — First Roll";
+            bool isEndless = lvlMgr != null && lvlMgr.GetComponent<EndlessTrackManager>() != null;
+            string title = isEndless
+                ? "SONSUZ JÖLE KOŞUSU — Mesafe: 0m | Skor: 0"
+                : (def != null ? $"{def.levelId.Replace('_', ' ')} — {def.displayName}" : "Level 01 — First Roll");
             var titleText = CreateLabel(hudPanel.transform, "LevelTitleLabel", title, new Vector2(0.5f, 0.94f));
-            var massText = CreateLabel(hudPanel.transform, "MassLabel", $"Kütle: {(def != null ? def.startingMass : 100f):F0} | Parça: 1  [WASD: Hareket | Space: Bölün | E: Birleş | R: Yeniden | N/P: Bölüm Geç]", new Vector2(0.5f, 0.88f));
+            string defaultMassText = isEndless
+                ? "Kütle: 90 | Durum: Tek Parça\nYeşil (+): Büyü | Kırmızı (-): Küçül | Mor (÷2): Bölün | Altın (><): Birleş"
+                : $"Kütle: {(def != null ? def.startingMass : 100f):F0} | Parça: 1  [WASD: Hareket | Space: Bölün | E: Birleş | R: Yeniden | N/P: Bölüm Geç]";
+            var massText = CreateLabel(hudPanel.transform, "MassLabel", defaultMassText, new Vector2(0.5f, 0.87f));
             var summaryText = CreateLabel(completePanel.transform, "SummaryLabel", "BÖLÜM TAMAMLANDI! Sonraki bölüme geçiliyor...", new Vector2(0.5f, 0.55f));
 
             var uiMgr = canvasGo.AddComponent<JellyUIManager>();
