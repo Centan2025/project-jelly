@@ -249,12 +249,6 @@ namespace Jelly
             }
             if (r == null) return;
 
-            if (!Application.isPlaying)
-            {
-                if (sharedMat != null) r.sharedMaterial = sharedMat;
-                return;
-            }
-
             Color32 key = c;
             if (!_colorMaterialCache.TryGetValue(key, out Material mat) || mat == null)
             {
@@ -266,8 +260,9 @@ namespace Jelly
                 mat = sharedMat != null ? new Material(sharedMat) : new Material(sh);
                 mat.color = c;
                 if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
-                if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.76f);
-                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.76f);
+                float smooth = c.a < 0.96f ? 0.82f : 0.22f;
+                if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smooth);
+                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smooth);
                 _colorMaterialCache[key] = mat;
             }
 

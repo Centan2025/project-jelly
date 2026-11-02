@@ -38,7 +38,24 @@ namespace Jelly.Editor
             if (EditorApplication.isPlayingOrWillChangePlaymode || Application.isPlaying || BuildPipeline.isBuildingPlayer) return;
             var root = GameObject.Find("LevelRuntimeRoot");
             var player = GameObject.Find("JellyPlayer");
-            var curvedSlice = GameObject.Find("RoadSlice_0");
+            var curvedSlice = GameObject.Find("SmoothRoadChunk_0");
+            var parallaxLayer = GameObject.Find("ParallaxFarLayer");
+
+            var endless = UnityEngine.Object.FindAnyObjectByType<EndlessTrackManager>();
+            if (endless != null && (curvedSlice == null || parallaxLayer == null))
+            {
+                endless.BuildInitialPreviewInEditor(endless.primaryPlayer);
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+                EditorSceneManager.SaveOpenScenes();
+                FocusSceneViewOnPlayer();
+            }
+
+            string snapDir = "C:/Users/ASUS/.gemini/antigravity/brain/b23231de-0eec-442f-8595-e27723cdca44";
+            if (endless != null && !File.Exists(Path.Combine(snapDir, "unity_piston_gate.png")))
+            {
+                endless.RenderComparisonSnapshotsToDisk(snapDir);
+            }
+
             if (root == null || player == null || curvedSlice == null)
             {
                 var sampleAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/SampleScene.unity");
@@ -50,7 +67,7 @@ namespace Jelly.Editor
                 if (!Application.isBatchMode)
                 {
                     EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
-                    if (GameObject.Find("RoadSlice_0") == null)
+                    if (GameObject.Find("SmoothRoadChunk_0") == null)
                     {
                         GenerateAll();
                         EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
@@ -159,6 +176,21 @@ namespace Jelly.Editor
             AssetDatabase.Refresh();
             FocusSceneViewOnPlayer();
             Debug.Log($"[JellyProjectBuilder] Successfully generated 50 LevelDefinitions, Prefabs, Materials, SampleScene, and {buildScenes.Count} Scenes.");
+        }
+
+        public static void GenerateAndCaptureSnapshots()
+        {
+            GenerateAll();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            var endless = UnityEngine.Object.FindAnyObjectByType<EndlessTrackManager>();
+            if (endless != null)
+            {
+                endless.BuildInitialPreviewInEditor(endless.primaryPlayer);
+                string snapDir = "C:/Users/ASUS/.gemini/antigravity/brain/b23231de-0eec-442f-8595-e27723cdca44";
+                endless.RenderComparisonSnapshotsToDisk(snapDir);
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+                EditorSceneManager.SaveOpenScenes();
+            }
         }
 
         public static void BatchBuildAndroidApk()

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Jelly — 3D Hyper-Casual Endless Morph & Split Runner</title>
+  <meta name="description" content="Project Jelly: Unity 3D tabanlı hiper-gündelik morfolojik jöle koşu oyunu. Bölünme, büyüme, küçülme ve 8 farklı pist mekaniği.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0c0a17;
+      --bg-card: rgba(26, 22, 48, 0.75);
+      --bg-card-border: rgba(140, 110, 255, 0.25);
+      --primary: #7b42ff;
+      --primary-glow: #9e6aff;
+      --accent-cyan: #00f0ff;
+      --accent-green: #00ffa3;
+      --accent-gold: #ffbe26;
+      --accent-pink: #ff3e88;
+      --text-main: #f5f4fc;
+      --text-muted: #a39eb8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% 15%, #24144d 0%, var(--bg-dark) 60%);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    header {
+      padding: 2.5rem 1.5rem 1.5rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .badge-bar {
+      display: inline-flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 1.2rem;
+    }
+
+    .badge {
+      background: rgba(123, 66, 255, 0.2);
+      border: 1px solid var(--bg-card-border);
+      color: var(--accent-cyan);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 4.2rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, #ffffff 20%, #a4e9ff 60%, #b27aff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.8rem;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.15rem;
+      max-width: 680px;
+      margin: 0 auto 2rem;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.85rem 1.8rem;
+      border-radius: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, #a03cff 100%);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(123, 66, 255, 0.4);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(123, 66, 255, 0.6);
+    }
+
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--bg-card-border);
+      color: var(--text-main);
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--accent-cyan);
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem 5rem;
+    }
+
+    .section-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .section-title::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 24px;
+      background: linear-gradient(to bottom, var(--accent-cyan), var(--primary));
+      border-radius: 3px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.8rem;
+      margin-bottom: 3.5rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.4rem;
+      margin-bottom: 3.5rem;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 16px;
+      padding: 1.6rem;
+      backdrop-filter: blur(12px);
+      transition: transform 0.25s ease, border-color 0.25s ease;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(140, 110, 255, 0.55);
+    }
+
+    .image-card {
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .image-card img {
+      width: 100%;
+      height: auto;
+      display: block;
+      object-fit: cover;
+      border-bottom: 1px solid var(--bg-card-border);
+    }
+    .image-card .card-caption {
+      padding: 1.2rem;
+    }
+    .image-card h4 {
+      font-size: 1.15rem;
+      margin-bottom: 0.4rem;
+      color: var(--accent-cyan);
+    }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 0.8rem;
+      display: inline-block;
+    }
+
+    .card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.6rem;
+    }
+    .card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .design-sheet-hero {
+      background: var(--bg-card);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 4rem;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+    }
+    .design-sheet-hero img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .design-sheet-info {
+      padding: 1.6rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      background: rgba(12, 10, 23, 0.7);
+    }
+
+    .biome-tag {
+      display: inline-block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      margin-right: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+    .biome-0 { background: #3648a8; color: #a4e9ff; }
+    .biome-1 { background: #7a36a8; color: #ffb8ec; }
+    .biome-2 { background: #205c8a; color: #8cf0ff; }
+    .biome-3 { background: #68261e; color: #ffb49e; }
+    .biome-4 { background: #281a54; color: #d09eff; }
+
+    footer {
+      text-align: center;
+      padding: 2.5rem 1.5rem;
+      border-top: 1px solid var(--bg-card-border);
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge-bar">
+      <span class="badge">Unity 6000 (URP)</span>
+      <span class="badge">3D Physics Body</span>
+      <span class="badge">Hyper-Casual Runner</span>
+      <span class="badge">50+ Progressive Levels</span>
+      <span class="badge">Vercel & GitHub</span>
+    </div>
+    <h1>PROJECT JELLY</h1>
+    <p class="subtitle">
+      Endless Morph & Split Runner — Büyüyen, küçülen, ikiye bölünen (÷2) ve birleşen (>&lt;) jöle fiziği, 8 modüler pist mimarisi ve dinamik 3B derinlik.
+    </p>
+    <div class="cta-row">
+      <a href="https://github.com/Centan2025/project-jelly" target="_blank" class="btn btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub Deposu
+      </a>
+      <a href="#karsilastirma" class="btn btn-outline">3B Obje Karşılaştırması</a>
+      <a href="#mekanikler" class="btn btn-outline">Oyun Mekanikleri</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Referans Tasarım Sayfası -->
+    <div class="design-sheet-hero">
+      <img src="images/project_jelly_design_sheet.jpg" alt="Project Jelly Resmi Tasarım Belgesi">
+      <div class="design-sheet-info">
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 700;">Project Jelly — Master Game Design Specification Sheet</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Referans dokümanında tanımlanan tüm varyasyonlar, engeller, nesneler ve arayüzler Unity 3D motorunda birebir kodlandı.</p>
+        </div>
+        <span class="badge" style="background: rgba(0, 255, 163, 0.15); color: var(--accent-green);">100% Tamamlandı</span>
+      </div>
+    </div>
+
+    <!-- Yan Yana Karşılaştırmalar -->
+    <h2 id="karsilastirma" class="section-title">Referans Görsel vs. Unity 3B Üretim Karşılaştırması</h2>
+    <div class="grid-2">
+      <div class="card image-card">
+        <img src="images/compare_piston_gate.png" alt="Piston Kapı Karşılaştırması">
+        <div class="card-caption">
+          <h4>Piston Kapı (Vertical Crusher Gate)</h4>
+          <p>Sarı-siyah ikaz şeritleri, aşağı yön oku (↓) ve dikey hidrolik ezici mekanizma ile sadece küçük jölelerin altından sığabileceği dikey engel.</p>
+        </div>
+      </div>
+
+      <div class="card image-card">
+        <img src="images/compare_glass_wall.png" alt="Kırılabilir Cam Duvar Karşılaştırması">
+        <div class="card-caption">
+          <h4>Kırılabilir Cam Duvar (Heavy Smash Wall)</h4>
+          <p>Önceden çatlak hatlarına sahip yarı saydam kristal duvar. Sadece kütlesi ≥ 115 olan Dev Jöle ile darbe anında 16 parçaya bölünerek parçalanır.</p>
+        </div>
+      </div>
+
+      <div class="card image-card">
+        <img src="images/compare_spinner_bar.png" alt="Dönen Engel Karşılaştırması">
+        <div class="card-caption">
+          <h4>Dönen Engel (Spinner Bar — Çap: ~4.6m)</h4>
+          <p>Merkezi kaide etrafında 360° dönen neon kollara sahip bariyer. Zamanlamayla aralardan veya bölünerek iki yandan kaçış gerektirir.</p>
+        </div>
+      </div>
+
+      <div class="card image-card">
+        <img src="images/compare_track_and_jelly.png" alt="Pist ve Jöle Karşılaştırması">
+        <div class="card-caption">
+          <h4>Kıvrımlı Spline Pist + Jöle + Pickuplar + Parallaks</h4>
+          <p>Pürüzsüz spline matematik şeritleri, cam yan bariyerler, yüzen gökyüzü adaları ve toplanabilir güçlendirme küreleriyle canlı sahne.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6 Temel Mekanik -->
+    <h2 id="mekanikler" class="section-title">Temel Oyun Mekanikleri & Özellikler</h2>
+    <div class="grid-4">
+      <div class="card">
+        <div class="feature-icon">🟢</div>
+        <h3>Dinamik Morfoloji</h3>
+        <p>Küçük Jöle (Ø0.62–0.85m), Normal Jöle (Ø~1.0m) ve Dev Jöle (Ø1.16–1.65m) arasında kütleye bağlı yumuşak hacim geçişi.</p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">🟣</div>
+        <h3>Bölünme (÷2) & Birleşme</h3>
+        <p>Tüneller ve ikiye ayrılan köprülerde jöle iki bağımsız kütleye ayrılır; engel sonrası otomatik veya manuel (>&lt;) birleşir.</p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">⚡</div>
+        <h3>9 Farklı Pickup</h3>
+        <p>Grow (+), Shrink (-), Split (÷2), Merge (>&lt;), SpeedBoost (⚡), Kalkan (🛡), Mıknatıs (🧲), Yıldız (+500⭐), Yavaş Zaman (⏳).</p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">🌈</div>
+        <h3>5 Dinamik Biyom</h3>
+        <p>
+          <span class="biome-tag biome-0">Jöle Diyarı</span>
+          <span class="biome-tag biome-1">Şeker Ülkesi</span>
+          <span class="biome-tag biome-2">Buz Kristal</span>
+          <span class="biome-tag biome-3">Volkanik Jel</span>
+          <span class="biome-tag biome-4">Uzay Jel</span>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">🌉</div>
+        <h3>8 Pist Mimarisi</h3>
+        <p>İkiz köprü uçurumu, rampalı uçuşlar, 2. kat kırılabilir cam viyadük, lazer dilimleyiciler, kaygan yüzeyler ve çarpan finali.</p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">📱</div>
+        <h3>6 Tam Ekran UI</h3>
+        <p>Ana Menü, Oyun İçi HUD, Görevler, Seviye Sonu Çarpanı, 3 Sekmeli Mağaza (Skin/İz/Efekt) ve Ayarlar ekranları.</p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">🛡️</div>
+        <h3>Hasar & Kalkan Sistemi</h3>
+        <p>Kalkan aktifken darbeleri absorbe eder; kalkan yoksa engellere çarpıldığında kütle kaybedilir veya bir parça feda edilir.</p>
+      </div>
+
+      <div class="card">
+        <div class="feature-icon">🎯</div>
+        <h3>x2 - x10 Final Puanı</h3>
+        <p>Her seviyenin sonunda kalan kütleye göre cam duvarları kırarak x2, x3, x5 ve x10 çarpanlarına ulaşma ödülü.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p>Project Jelly © 2026 JellyStudio — Unity 3D & Vercel Showcase</p>
+  </footer>
+
+</body>
+</html>

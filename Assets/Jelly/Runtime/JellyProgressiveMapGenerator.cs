@@ -36,7 +36,7 @@ namespace Jelly
             var bp = new JellyLevelBlueprint
             {
                 LevelNumber = levelNumber,
-                BiomeIndex = (levelNumber - 1) % 3,
+                BiomeIndex = (levelNumber - 1) % 5,
                 SpeedMultiplier = Mathf.Min(1.55f, 1.0f + (levelNumber - 1) * 0.045f),
                 CurveIntensity = Mathf.Min(1.30f, 0.72f + (levelNumber - 1) * 0.05f)
             };
@@ -81,12 +81,12 @@ namespace Jelly
         {
             switch (lvl)
             {
-                case 1: return "SEVİYE 1: İLK MORFOLOJİ & RAMPA";
-                case 2: return "SEVİYE 2: ÇATALLANAN İKİZ KÖPRÜLER";
-                case 3: return "SEVİYE 3: LAZER KESİCİLER & KAYAR KAPI";
-                case 4: return "SEVİYE 4: İKİ KATLI YOL & CAM KÖPRÜ";
-                case 5: return "SEVİYE 5: KONVEYÖR BANT & SARKAÇLAR";
-                case 6: return "SEVİYE 6: RENK BARİYERLERİ & MAKAS KAPI";
+                case 1: return "SEVİYE 1: JÖLE DİYARI (Ana Tema)";
+                case 2: return "SEVİYE 2: ŞEKER ÜLKESİ (Candy)";
+                case 3: return "SEVİYE 3: BUZ KRİSTAL (Ice)";
+                case 4: return "SEVİYE 4: VOLKANİK JEL (Lava-Jelly)";
+                case 5: return "SEVİYE 5: UZAY JEL (Neon/Galaksi)";
+                case 6: return "SEVİYE 6: İKİZ TÜNELLER & SARKAÇLAR";
                 default: return $"SEVİYE {lvl}: USTA PARKUR (Zorluk x{1f + (lvl - 1) * 0.08f:F1})";
             }
         }
@@ -150,19 +150,20 @@ namespace Jelly
 
         private static EndlessObstacleType PickGateForLevel(int lvl, int seed)
         {
-            int idx = (lvl * 2 + seed) % 10;
+            // Prioritize the 7 core obstacles shown in the Project Jelly Design Sheet:
+            // SmallCenterHole, VerticalCrusherGate, HeavySmashWall, TwinSplitTunnels, MovingTwinTunnels, SwingingPendulum, SpinnerBar
+            int idx = (lvl * 2 + seed) % 9;
             switch (idx)
             {
                 case 0: return EndlessObstacleType.SmallCenterHole;
-                case 1: return EndlessObstacleType.SlidingDoorWall;
-                case 2: return EndlessObstacleType.TwinSplitTunnels;
-                case 3: return EndlessObstacleType.HeavySmashWall;
-                case 4: return EndlessObstacleType.PincerShutters;
-                case 5: return EndlessObstacleType.VerticalCrusherGate;
-                case 6: return EndlessObstacleType.SwingingPendulum;
-                case 7: return EndlessObstacleType.MovingTwinTunnels;
-                case 8: return EndlessObstacleType.LeftOpeningWall;
-                default: return EndlessObstacleType.RightOpeningWall;
+                case 1: return EndlessObstacleType.TwinSplitTunnels;
+                case 2: return EndlessObstacleType.HeavySmashWall;
+                case 3: return EndlessObstacleType.VerticalCrusherGate;
+                case 4: return EndlessObstacleType.MovingTwinTunnels;
+                case 5: return EndlessObstacleType.SwingingPendulum;
+                case 6: return EndlessObstacleType.SpinnerBar;
+                case 7: return EndlessObstacleType.SlidingDoorWall;
+                default: return EndlessObstacleType.PincerShutters;
             }
         }
     }

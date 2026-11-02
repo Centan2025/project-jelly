@@ -295,8 +295,8 @@ MonoBehaviour:
   router: {fileID: 0}
   minFragmentMass: 20
   defaultSplitRatio: 0.5
-  splitImpulse: 3.2
-  splitCooldown: 0.45
+  splitImpulse: 1.8
+  splitCooldown: 0.25
   maxFragments: 2
 --- !u!114 &8151414384891107867
 MonoBehaviour:
@@ -315,8 +315,8 @@ MonoBehaviour:
   pool: {fileID: 0}
   mergeDistancePadding: 0.35
   maxRelativeSpeed: 9
-  minTimeSinceSplit: 0.55
-  autoMergeOnProximity: 1
+  minTimeSinceSplit: 1.2
+  autoMergeOnProximity: 0
 --- !u!1 &7976758599227491376
 GameObject:
   m_ObjectHideFlags: 0

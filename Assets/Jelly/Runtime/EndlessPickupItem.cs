@@ -8,7 +8,11 @@ namespace Jelly
         Shrink,
         Split,
         Merge,
-        SpeedBoost
+        SpeedBoost,
+        Shield,
+        Magnet,
+        StarScore,
+        SlowTime
     }
 
     public class EndlessPickupItem : MonoBehaviour
@@ -31,6 +35,13 @@ namespace Jelly
             _phaseOffset = transform.position.z * 0.35f + transform.position.x;
         }
 
+        public void SetWorldPosition(Vector3 pos)
+        {
+            transform.position = pos;
+            _basePos = pos;
+            _baseCaptured = true;
+        }
+
         private void Update()
         {
             transform.Rotate(0f, spinSpeed * Time.deltaTime, 0f, Space.Self);
@@ -49,7 +60,11 @@ namespace Jelly
                 case EndlessPickupType.Shrink: return $"-{amount:F0} KÜÇÜL";
                 case EndlessPickupType.Split: return "÷2 BÖLÜN";
                 case EndlessPickupType.Merge: return ">< BİRLEŞ";
-                case EndlessPickupType.SpeedBoost: return "⚡ HIZLAN";
+                case EndlessPickupType.SpeedBoost: return "⚡ HIZ +%35";
+                case EndlessPickupType.Shield: return "🛡 KALKAN";
+                case EndlessPickupType.Magnet: return "🧲 MIKNATIS";
+                case EndlessPickupType.StarScore: return "⭐ +500 PUAN";
+                case EndlessPickupType.SlowTime: return "⏳ YAVAŞ ZAMAN";
                 default: return "";
             }
         }
@@ -58,11 +73,15 @@ namespace Jelly
         {
             switch (pickupType)
             {
-                case EndlessPickupType.Grow: return new Color(0.18f, 0.92f, 0.45f);
-                case EndlessPickupType.Shrink: return new Color(0.98f, 0.28f, 0.38f);
-                case EndlessPickupType.Split: return new Color(0.75f, 0.35f, 1.00f);
+                case EndlessPickupType.Grow: return new Color(0.18f, 0.96f, 0.48f);
+                case EndlessPickupType.Shrink: return new Color(1.00f, 0.30f, 0.38f);
+                case EndlessPickupType.Split: return new Color(0.78f, 0.38f, 1.00f);
                 case EndlessPickupType.Merge: return new Color(1.00f, 0.82f, 0.18f);
-                case EndlessPickupType.SpeedBoost: return new Color(0.20f, 0.88f, 1.00f);
+                case EndlessPickupType.SpeedBoost: return new Color(0.20f, 0.94f, 1.00f);
+                case EndlessPickupType.Shield: return new Color(0.88f, 0.36f, 0.98f);
+                case EndlessPickupType.Magnet: return new Color(0.32f, 0.68f, 1.00f);
+                case EndlessPickupType.StarScore: return new Color(1.00f, 0.88f, 0.22f);
+                case EndlessPickupType.SlowTime: return new Color(0.96f, 0.68f, 0.28f);
                 default: return Color.white;
             }
         }

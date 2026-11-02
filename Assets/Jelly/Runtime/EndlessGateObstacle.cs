@@ -4,20 +4,23 @@ namespace Jelly
 {
     public enum EndlessObstacleType
     {
-        SmallCenterHole,
-        TwinSplitTunnels,
-        HeavySmashWall,
+        SmallCenterHole,      // Dar Geçit (Ø 0.72 - 0.85m, Sadece Küçük Jöle ≤ 75)
+        TwinSplitTunnels,     // İkiz Tünel (Sol/sağ ~2.5m, Ortası kapalı, Bölünerek geçilir)
+        HeavySmashWall,       // Kırılabilir Cam Duvar (Sadece Dev Jöle ≥ 115, Parçalanabilir)
         LeftOpeningWall,
         RightOpeningWall,
-        SlidingDoorWall,      // Hareketli Kayar Kapı (sağa-sola kayan açıklık)
+        SlidingDoorWall,      // Hareketli Kayar Kapı
         PincerShutters,       // Açılıp Kapanan Makas Duvarlar
-        VerticalCrusherGate,  // İnip Kalkan Giyotin / Piston Kapı
-        SwingingPendulum,     // Sallanan Dev Balyoz Sarkaç
-        MovingTwinTunnels     // Sağa-sola kayan İkiz Bölünme Tüneli
+        VerticalCrusherGate,  // Piston Kapı (Açıklık Yük: 0.62 - 0.85m, Sadece Küçük Jöle / Zamanlama)
+        SwingingPendulum,     // Sarkaç (Genişlik ~1.2m, Zamanlamayla veya bölünerek geçilir)
+        MovingTwinTunnels,    // Hareketli İkiz Tünel (Açılıp kapanan çift tünel, Bölünerek geçilir)
+        SpinnerBar            // Dönen Engel (Çap ~4.6m, Dönen kollar, zamanlama ile geçilir)
     }
 
     public class EndlessGateObstacle : MonoBehaviour
     {
+        public static float GlobalObstacleTimeScale = 1.0f;
+
         public EndlessObstacleType obstacleType;
         public float trackZ;
         public float maxAllowedMassForSmallHole = 75f;
@@ -36,22 +39,26 @@ namespace Jelly
         public float CurrentPincerGapHalfWidth { get; private set; } = 1.2f;
         public float CurrentCrusherBottomY { get; private set; } = 1.5f;
         public float CurrentHazardCenterX { get; private set; }
+        public float CurrentSpinnerAngleDeg { get; private set; }
+
+        private float _accumTime;
 
         private void Start()
         {
             if (Mathf.Approximately(animPhaseOffset, 0f))
                 animPhaseOffset = trackZ * 0.19f;
+            _accumTime = animPhaseOffset;
         }
 
         private void Update()
         {
-            float t = Time.time * animSpeed + animPhaseOffset;
+            _accumTime += Time.deltaTime * animSpeed * GlobalObstacleTimeScale;
+            float t = _accumTime;
 
             switch (obstacleType)
             {
                 case EndlessObstacleType.SlidingDoorWall:
                 {
-                    // The gap slides between X = -1.45 and X = +1.45
                     CurrentOpeningCenterX = Mathf.Sin(t) * 1.45f;
                     float halfGap = 0.98f;
                     if (movingPartA != null)
@@ -120,6 +127,16 @@ namespace Jelly
                     }
                     break;
                 }
+
+                case EndlessObstacleType.SpinnerBar:
+                {
+                    CurrentSpinnerAngleDeg = (t * 82f) % 360f;
+                    if (movingPartA != null)
+                    {
+                        movingPartA.localRotation = Quaternion.Euler(0f, CurrentSpinnerAngleDeg, 0f);
+                    }
+                    break;
+                }
             }
         }
 
@@ -127,16 +144,17 @@ namespace Jelly
         {
             switch (obstacleType)
             {
-                case EndlessObstacleType.SmallCenterHole: return $"DAR GEÇİT (Kütle ≤ {maxAllowedMassForSmallHole:F0})";
-                case EndlessObstacleType.TwinSplitTunnels: return "İKİZ TÜNEL (÷2 Bölün)";
-                case EndlessObstacleType.HeavySmashWall: return $"CAM DUVAR (Kütle ≥ {minRequiredMassForSmash:F0} Kırar)";
+                case EndlessObstacleType.SmallCenterHole: return $"DAR GEÇİT (Sadece Küçük Jöle ≤ {maxAllowedMassForSmallHole:F0})";
+                case EndlessObstacleType.TwinSplitTunnels: return "İKİZ TÜNEL (÷2 Bölünerek Geçilir)";
+                case EndlessObstacleType.HeavySmashWall: return $"KIRILABİLİR CAM DUVAR (Dev Jöle ≥ {minRequiredMassForSmash:F0})";
                 case EndlessObstacleType.LeftOpeningWall: return "◀ SOL KORİDOR";
                 case EndlessObstacleType.RightOpeningWall: return "SAĞ KORİDOR ▶";
                 case EndlessObstacleType.SlidingDoorWall: return "◀▶ KAYAR KAPI";
                 case EndlessObstacleType.PincerShutters: return "▶◀ MAKAS KAPI";
-                case EndlessObstacleType.VerticalCrusherGate: return "▲▼ PİSTON KAPI";
-                case EndlessObstacleType.SwingingPendulum: return "⚠ DEV SARKAÇ";
+                case EndlessObstacleType.VerticalCrusherGate: return "⬇ PİSTON KAPI (Küçük Jöle / Zamanlama)";
+                case EndlessObstacleType.SwingingPendulum: return "⚠ SARKAÇ (Zamanlama veya ÷2 Bölün)";
                 case EndlessObstacleType.MovingTwinTunnels: return "◀÷2▶ HAREKETLİ İKİZ TÜNEL";
+                case EndlessObstacleType.SpinnerBar: return "↻ DÖNEN ENGEL (Zamanlama ile Geç)";
                 default: return "ENGEL";
             }
         }
@@ -145,14 +163,15 @@ namespace Jelly
         {
             switch (obstacleType)
             {
-                case EndlessObstacleType.SmallCenterHole: return new Color(1.00f, 0.35f, 0.42f);
+                case EndlessObstacleType.SmallCenterHole: return new Color(0.62f, 0.36f, 0.96f);
                 case EndlessObstacleType.TwinSplitTunnels:
-                case EndlessObstacleType.MovingTwinTunnels: return new Color(0.76f, 0.38f, 1.00f);
-                case EndlessObstacleType.HeavySmashWall: return new Color(0.18f, 0.92f, 0.50f);
+                case EndlessObstacleType.MovingTwinTunnels: return new Color(0.84f, 0.36f, 1.00f);
+                case EndlessObstacleType.HeavySmashWall: return new Color(0.28f, 0.88f, 1.00f);
+                case EndlessObstacleType.VerticalCrusherGate: return new Color(1.00f, 0.78f, 0.18f);
                 case EndlessObstacleType.SlidingDoorWall:
-                case EndlessObstacleType.PincerShutters:
-                case EndlessObstacleType.VerticalCrusherGate: return new Color(0.15f, 0.80f, 0.98f);
-                case EndlessObstacleType.SwingingPendulum: return new Color(1.00f, 0.60f, 0.15f);
+                case EndlessObstacleType.PincerShutters: return new Color(0.20f, 0.85f, 0.98f);
+                case EndlessObstacleType.SwingingPendulum:
+                case EndlessObstacleType.SpinnerBar: return new Color(0.96f, 0.45f, 0.92f);
                 default: return new Color(1.00f, 0.80f, 0.22f);
             }
         }
@@ -167,7 +186,7 @@ namespace Jelly
             {
                 Vector3 burstCenter = breakableCenterPiece.position;
                 breakableCenterPiece.gameObject.SetActive(false);
-                SpawnDebrisBurst(burstCenter, new Color(0.28f, 0.96f, 0.62f), 14);
+                SpawnDebrisBurst(burstCenter, new Color(0.48f, 0.92f, 1.00f), 16);
             }
         }
 
