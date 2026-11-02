@@ -1,0 +1,14 @@
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+Assets/
+Packages/
+ProjectSettings/
+*.log
+.git/
+.vs/
+.idea/
