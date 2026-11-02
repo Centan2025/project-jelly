@@ -34,3 +34,6 @@ crashlytics-build.properties
 *.log
 .vercel/
 
+
+.vercel
+.env*
