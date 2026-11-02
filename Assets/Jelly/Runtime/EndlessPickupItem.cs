@@ -23,6 +23,7 @@ namespace Jelly
         public float trackZ;
         private bool _consumed;
         private Vector3 _basePos;
+        private Quaternion _baseRot;
         private bool _baseCaptured;
         private float _phaseOffset;
 
@@ -31,6 +32,7 @@ namespace Jelly
         private void Start()
         {
             _basePos = transform.position;
+            _baseRot = transform.rotation;
             _baseCaptured = true;
             _phaseOffset = transform.position.z * 0.35f + transform.position.x;
         }
@@ -39,16 +41,26 @@ namespace Jelly
         {
             transform.position = pos;
             _basePos = pos;
+            _baseRot = transform.rotation;
             _baseCaptured = true;
         }
 
         private void Update()
         {
-            transform.Rotate(0f, spinSpeed * Time.deltaTime, 0f, Space.Self);
-            if (_baseCaptured && pickupType != EndlessPickupType.SpeedBoost)
+            if (!_baseCaptured)
             {
-                float bob = Mathf.Sin(Time.time * 3.8f + _phaseOffset) * 0.14f;
+                _basePos = transform.position;
+                _baseRot = transform.rotation;
+                _baseCaptured = true;
+            }
+
+            if (pickupType != EndlessPickupType.SpeedBoost)
+            {
+                float t = Time.time * 3.4f + _phaseOffset;
+                float bob = Mathf.Sin(t) * 0.12f;
+                float swayYaw = Mathf.Sin(t * 0.85f) * 14f;
                 transform.position = _basePos + Vector3.up * bob;
+                transform.rotation = _baseRot * Quaternion.Euler(0f, swayYaw, 0f);
             }
         }
 

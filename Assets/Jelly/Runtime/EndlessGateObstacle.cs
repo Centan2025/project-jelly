@@ -4,17 +4,22 @@ namespace Jelly
 {
     public enum EndlessObstacleType
     {
-        SmallCenterHole,      // Dar Geçit (Ø 0.72 - 0.85m, Sadece Küçük Jöle ≤ 75)
-        TwinSplitTunnels,     // İkiz Tünel (Sol/sağ ~2.5m, Ortası kapalı, Bölünerek geçilir)
-        HeavySmashWall,       // Kırılabilir Cam Duvar (Sadece Dev Jöle ≥ 115, Parçalanabilir)
+        SmallCenterHole,       // 1. Dar Geçit (Ø 0.72 - 0.85m, Sadece Küçük Jöle ≤ 75)
+        TwinSplitTunnels,      // 4. İkiz Tünel (Sol/sağ ~2.5m, Ortası kapalı, Bölünerek geçilir)
+        HeavySmashWall,        // 3. Kırılabilir Cam Duvar (Sadece Dev Jöle ≥ 115, Parçalanabilir)
         LeftOpeningWall,
         RightOpeningWall,
-        SlidingDoorWall,      // Hareketli Kayar Kapı
-        PincerShutters,       // Açılıp Kapanan Makas Duvarlar
-        VerticalCrusherGate,  // Piston Kapı (Açıklık Yük: 0.62 - 0.85m, Sadece Küçük Jöle / Zamanlama)
-        SwingingPendulum,     // Sarkaç (Genişlik ~1.2m, Zamanlamayla veya bölünerek geçilir)
-        MovingTwinTunnels,    // Hareketli İkiz Tünel (Açılıp kapanan çift tünel, Bölünerek geçilir)
-        SpinnerBar            // Dönen Engel (Çap ~4.6m, Dönen kollar, zamanlama ile geçilir)
+        SlidingDoorWall,       // Hareketli Kayar Kapı
+        PincerShutters,        // Açılıp Kapanan Makas Duvarlar
+        VerticalCrusherGate,   // 2. Piston Kapı (Açıklık Yük: 0.62 - 0.85m, Sadece Küçük Jöle / Zamanlama)
+        SwingingPendulum,      // Sarkaç (Genişlik ~1.2m, Zamanlamayla veya bölünerek geçilir)
+        MovingTwinTunnels,     // Hareketli İkiz Tünel (Açılıp kapanan çift tünel, Bölünerek geçilir)
+        SpinnerBar,            // Dönen Engel (Çap ~4.6m, Dönen kollar, zamanlama ile geçilir)
+        MultiHoleDecisionWall, // 5. Çoklu Delik Duvarı (Boyut Seçimi / Bölünme Seçimi / Risk–Ödül Seçimi)
+        FlexibleSqueezeGate,   // Faz 4: Esnek Geçit (Jöle daralarak uzun açıklıktan geçer ≤ 88)
+        MassScaleGate,         // Faz 4: Kütle Terazisi (Kapıyı açmak için belirli kütle gerekir ≥ 105)
+        SlidingHoleWall,       // Faz 4: Hareketli Delik Duvarı (Doğru zamanlama ister)
+        MicroShatterGate       // Faz 6: Parçalanma Kapısı (Çok sayıda küçük parçaya dönüştürür)
     }
 
     public class EndlessGateObstacle : MonoBehaviour
@@ -22,6 +27,7 @@ namespace Jelly
         public static float GlobalObstacleTimeScale = 1.0f;
 
         public EndlessObstacleType obstacleType;
+        public MultiHoleWallConfig multiHoleConfig;
         public float trackZ;
         public float maxAllowedMassForSmallHole = 75f;
         public float minRequiredMassForSmash = 115f;
@@ -43,11 +49,18 @@ namespace Jelly
 
         private float _accumTime;
 
+        public bool IsBreakableCrystalSurface => obstacleType == EndlessObstacleType.HeavySmashWall;
+
         private void Start()
         {
             if (Mathf.Approximately(animPhaseOffset, 0f))
                 animPhaseOffset = trackZ * 0.19f;
             _accumTime = animPhaseOffset;
+
+            if (obstacleType == EndlessObstacleType.MultiHoleDecisionWall && multiHoleConfig == null)
+            {
+                multiHoleConfig = MultiHoleWallConfig.CreateSizeChoicePreset();
+            }
         }
 
         private void Update()
@@ -137,6 +150,61 @@ namespace Jelly
                     }
                     break;
                 }
+
+                case EndlessObstacleType.SlidingHoleWall:
+                {
+                    CurrentOpeningCenterX = Mathf.Sin(t * 1.15f) * 1.65f;
+                    if (movingPartA != null)
+                    {
+                        movingPartA.localPosition = new Vector3(CurrentOpeningCenterX, 0.72f, 0f);
+                    }
+                    break;
+                }
+            }
+        }
+
+        public void SetCrusherBottomYForTesting(float bottomY)
+        {
+            CurrentCrusherBottomY = bottomY;
+        }
+
+        public void SetOpeningCenterXForTesting(float centerX)
+        {
+            CurrentOpeningCenterX = centerX;
+        }
+
+        public Phase2ObstacleEvaluation EvaluateCoreObstacle(float totalMass, float centerX, bool isSplit)
+        {
+            switch (obstacleType)
+            {
+                case EndlessObstacleType.SmallCenterHole:
+                    return Phase2CoreObstacleEvaluator.EvaluateSmallCenterHole(totalMass, centerX, isSplit, maxAllowedMassForSmallHole);
+                case EndlessObstacleType.VerticalCrusherGate:
+                    return Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(totalMass, centerX, isSplit, CurrentCrusherBottomY, maxAllowedMassForSmallHole);
+                case EndlessObstacleType.HeavySmashWall:
+                    return Phase2CoreObstacleEvaluator.EvaluateHeavySmashWall(totalMass, centerX, isSplit, minRequiredMassForSmash);
+                case EndlessObstacleType.TwinSplitTunnels:
+                    return Phase2CoreObstacleEvaluator.EvaluateTwinSplitTunnels(totalMass, centerX, isSplit);
+                case EndlessObstacleType.MultiHoleDecisionWall:
+                    return Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(
+                        multiHoleConfig ?? MultiHoleWallConfig.CreateSizeChoicePreset(),
+                        totalMass, centerX, isSplit);
+                case EndlessObstacleType.FlexibleSqueezeGate:
+                    return Phase2CoreObstacleEvaluator.EvaluateFlexibleSqueezeGate(totalMass, centerX, isSplit);
+                case EndlessObstacleType.MassScaleGate:
+                    return Phase2CoreObstacleEvaluator.EvaluateMassScaleGate(totalMass, centerX, isSplit);
+                case EndlessObstacleType.SlidingHoleWall:
+                    return Phase2CoreObstacleEvaluator.EvaluateSlidingHoleWall(totalMass, centerX, isSplit, CurrentOpeningCenterX);
+                case EndlessObstacleType.MicroShatterGate:
+                    return Phase2CoreObstacleEvaluator.EvaluateMicroShatterGate(totalMass, centerX, isSplit);
+                default:
+                    return new Phase2ObstacleEvaluation
+                    {
+                        Outcome = Phase2ObstacleOutcome.SolidWallBounce,
+                        CanPass = false,
+                        ShatteredCrystal = false,
+                        FeedbackBanner = "ENGEL"
+                    };
             }
         }
 
@@ -147,6 +215,10 @@ namespace Jelly
                 case EndlessObstacleType.SmallCenterHole: return $"DAR GEÇİT (Sadece Küçük Jöle ≤ {maxAllowedMassForSmallHole:F0})";
                 case EndlessObstacleType.TwinSplitTunnels: return "İKİZ TÜNEL (÷2 Bölünerek Geçilir)";
                 case EndlessObstacleType.HeavySmashWall: return $"KIRILABİLİR CAM DUVAR (Dev Jöle ≥ {minRequiredMassForSmash:F0})";
+                case EndlessObstacleType.MultiHoleDecisionWall:
+                    return multiHoleConfig != null && !string.IsNullOrEmpty(multiHoleConfig.HeaderTitle)
+                        ? multiHoleConfig.HeaderTitle
+                        : "ÇOKLU DELİK DUVARI (Boyut / Bölünme / Risk Seçimi)";
                 case EndlessObstacleType.LeftOpeningWall: return "◀ SOL KORİDOR";
                 case EndlessObstacleType.RightOpeningWall: return "SAĞ KORİDOR ▶";
                 case EndlessObstacleType.SlidingDoorWall: return "◀▶ KAYAR KAPI";
@@ -155,6 +227,10 @@ namespace Jelly
                 case EndlessObstacleType.SwingingPendulum: return "⚠ SARKAÇ (Zamanlama veya ÷2 Bölün)";
                 case EndlessObstacleType.MovingTwinTunnels: return "◀÷2▶ HAREKETLİ İKİZ TÜNEL";
                 case EndlessObstacleType.SpinnerBar: return "↻ DÖNEN ENGEL (Zamanlama ile Geç)";
+                case EndlessObstacleType.FlexibleSqueezeGate: return "⟿ ESNEK GEÇİT (Daralarak Süzül ≤ 88)";
+                case EndlessObstacleType.MassScaleGate: return "⚖ KÜTLE TERAZİSİ (Kapıyı Açmak İçin ≥ 105)";
+                case EndlessObstacleType.SlidingHoleWall: return "⇄ HAREKETLİ DELİK DUVARI (Zamanlamayı Tuttur)";
+                case EndlessObstacleType.MicroShatterGate: return "✨ PARÇALANMA KAPISI (Çoklu Mikro-Bölünme)";
                 default: return "ENGEL";
             }
         }
@@ -167,6 +243,7 @@ namespace Jelly
                 case EndlessObstacleType.TwinSplitTunnels:
                 case EndlessObstacleType.MovingTwinTunnels: return new Color(0.84f, 0.36f, 1.00f);
                 case EndlessObstacleType.HeavySmashWall: return new Color(0.28f, 0.88f, 1.00f);
+                case EndlessObstacleType.MultiHoleDecisionWall: return new Color(1.00f, 0.82f, 0.24f);
                 case EndlessObstacleType.VerticalCrusherGate: return new Color(1.00f, 0.78f, 0.18f);
                 case EndlessObstacleType.SlidingDoorWall:
                 case EndlessObstacleType.PincerShutters: return new Color(0.20f, 0.85f, 0.98f);
@@ -182,6 +259,7 @@ namespace Jelly
         /// </summary>
         public void ShatterBreakablePiece()
         {
+            if (!IsBreakableCrystalSurface) return;
             if (breakableCenterPiece != null && breakableCenterPiece.gameObject.activeSelf)
             {
                 Vector3 burstCenter = breakableCenterPiece.position;

@@ -11,6 +11,9 @@ namespace Jelly
         public SurfaceHazardKind HazardKind;
         public LaserGateKind LaserKind;
         public int ColorIndex;
+        public int MultiHoleVariant; // -1 = auto, 0 = SizeChoice, 1 = SplitChoice, 2 = RiskReward
+        public bool HasBonusPickup;
+        public EndlessPickupType BonusPickup;
     }
 
     public class JellyLevelBlueprint
@@ -25,146 +28,190 @@ namespace Jelly
     }
 
     /// <summary>
-    /// Core Progressive Map & Level Architecture ("Harita Geliştirme Sistemi").
-    /// Generates structured, progressively harder multi-mechanic 3D courses for Level 1..999+.
+    /// Short, sequential showcase & test level curriculum (Levels 1..15) so every 3D obstacle,
+    /// pickup, and track mechanic can be seen and tested one by one in ~8–12 second stages.
     /// </summary>
     public static class JellyProgressiveMapGenerator
     {
+        public const int TotalShowcaseLevels = 15;
+
         public static JellyLevelBlueprint GenerateLevel(int levelNumber)
         {
             levelNumber = Mathf.Max(1, levelNumber);
+            int showcaseIdx = ((levelNumber - 1) % TotalShowcaseLevels) + 1;
+
             var bp = new JellyLevelBlueprint
             {
                 LevelNumber = levelNumber,
                 BiomeIndex = (levelNumber - 1) % 5,
-                SpeedMultiplier = Mathf.Min(1.55f, 1.0f + (levelNumber - 1) * 0.045f),
-                CurveIntensity = Mathf.Min(1.30f, 0.72f + (levelNumber - 1) * 0.05f)
+                SpeedMultiplier = 1.0f,
+                // Gentle curve so obstacles and pickups are clearly visible straight ahead
+                CurveIntensity = 0.22f,
+                LevelTitle = GetLevelThemeTitle(showcaseIdx, levelNumber)
             };
 
-            bp.LevelTitle = GetLevelThemeTitle(levelNumber);
+            BuildSequentialTestStages(bp, showcaseIdx);
 
-            // Opening safe runway chunk (0m .. 12m)
-            bp.Chunks.Add(new TrackChunkSpec { ModuleType = TrackSegmentModuleType.StandardRoad });
-
-            // Number of challenge stages grows with level (from 7 chunks in Level 1 up to 16+ chunks in higher levels)
-            int stageCount = Mathf.Clamp(6 + levelNumber, 7, 16);
-            var pool = BuildAllowedModulePool(levelNumber);
-
-            for (int i = 0; i < stageCount; i++)
-            {
-                TrackChunkSpec spec = CreateStageSpec(levelNumber, i, pool);
-                bp.Chunks.Add(spec);
-
-                // Add a recovery/transition road chunk after intense aerial/bridge modules so pacing feels great
-                if (spec.ModuleType == TrackSegmentModuleType.JumpRampOverAbyss ||
-                    spec.ModuleType == TrackSegmentModuleType.DoubleDeckerOverpass ||
-                    spec.ModuleType == TrackSegmentModuleType.SplitTwinBridge)
-                {
-                    bp.Chunks.Add(new TrackChunkSpec
-                    {
-                        ModuleType = TrackSegmentModuleType.StandardRoad,
-                        HasGateObstacle = (levelNumber >= 3 && i % 2 == 1),
-                        GateType = PickGateForLevel(levelNumber, i + 3)
-                    });
-                }
-            }
-
-            // Finale Multiplier Runway (2 chunks at the end: x2 -> x3 -> x5 -> x10 + Finish Arch)
-            bp.Chunks.Add(new TrackChunkSpec { ModuleType = TrackSegmentModuleType.LevelFinaleMultiplier });
+            // Single short Finale Multiplier chunk at the end so the level finishes quickly (~36m total)
             bp.Chunks.Add(new TrackChunkSpec { ModuleType = TrackSegmentModuleType.LevelFinaleMultiplier });
 
             bp.TotalTrackLength = bp.Chunks.Count * 12f;
             return bp;
         }
 
-        private static string GetLevelThemeTitle(int lvl)
+        public static string GetLevelThemeTitle(int showcaseIdx, int rawLevelNumber)
         {
-            switch (lvl)
+            switch (showcaseIdx)
             {
-                case 1: return "SEVİYE 1: JÖLE DİYARI (Ana Tema)";
-                case 2: return "SEVİYE 2: ŞEKER ÜLKESİ (Candy)";
-                case 3: return "SEVİYE 3: BUZ KRİSTAL (Ice)";
-                case 4: return "SEVİYE 4: VOLKANİK JEL (Lava-Jelly)";
-                case 5: return "SEVİYE 5: UZAY JEL (Neon/Galaksi)";
-                case 6: return "SEVİYE 6: İKİZ TÜNELLER & SARKAÇLAR";
-                default: return $"SEVİYE {lvl}: USTA PARKUR (Zorluk x{1f + (lvl - 1) * 0.08f:F1})";
+                case 1: return $"LVL {rawLevelNumber}: 1. DAR GEÇİT & KÜÇÜLME (-)";
+                case 2: return $"LVL {rawLevelNumber}: 2. PİSTON KAPI & YAVAŞ ZAMAN (⏳)";
+                case 3: return $"LVL {rawLevelNumber}: 3. KIRILABİLİR CAM DUVAR & BÜYÜME (+)";
+                case 4: return $"LVL {rawLevelNumber}: 4. İKİZ TÜNEL & BÖLÜNME (÷2) / BİRLEŞME (><)";
+                case 5: return $"LVL {rawLevelNumber}: 5A. ÇOKLU DELİK — BOYUT SEÇİMİ";
+                case 6: return $"LVL {rawLevelNumber}: 5B. ÇOKLU DELİK — BÖLÜNME SEÇİMİ";
+                case 7: return $"LVL {rawLevelNumber}: 5C. ÇOKLU DELİK — RİSK & ÖDÜL (⭐)";
+                case 8: return $"LVL {rawLevelNumber}: 6. HAREKETLİ İKİZ TÜNEL & HIZ BANDI (⚡)";
+                case 9: return $"LVL {rawLevelNumber}: 7. SARKAÇ (PENDULUM) & KALKAN (🛡)";
+                case 10: return $"LVL {rawLevelNumber}: 8. DÖNEN ENGEL (SPINNER) & MIKNATIS (🧲)";
+                case 11: return $"LVL {rawLevelNumber}: 9. ESNEK GEÇİT & KÜTLE TERAZİSİ";
+                case 12: return $"LVL {rawLevelNumber}: 10. HAREKETLİ DELİK & PARÇALANMA KAPISI";
+                case 13: return $"LVL {rawLevelNumber}: 11. KÖPRÜ RAMPA & İKİZ KÖPRÜ";
+                case 14: return $"LVL {rawLevelNumber}: 12. MIKNATIS ALANI, YAPIŞKAN ZEMİN & ZIPLAMA PEDİ";
+                default: return $"LVL {rawLevelNumber}: 13. LAZER KESİCİ & RENK EŞLEŞTİRME";
             }
         }
 
-        private static List<TrackSegmentModuleType> BuildAllowedModulePool(int lvl)
+        private static void BuildSequentialTestStages(JellyLevelBlueprint bp, int showcaseIdx)
         {
-            var list = new List<TrackSegmentModuleType>
+            switch (showcaseIdx)
             {
-                TrackSegmentModuleType.StandardRoad,
-                TrackSegmentModuleType.JumpRampOverAbyss,
-                TrackSegmentModuleType.SplitTwinBridge
+                case 1: // 1. Dar Geçit (Gate_Narrow) + Shrink (-)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SmallCenterHole));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SmallCenterHole));
+                    break;
+
+                case 2: // 2. Piston Kapı (Gate_Piston) + SlowTime (⏳)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.VerticalCrusherGate, true, EndlessPickupType.SlowTime));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.VerticalCrusherGate, true, EndlessPickupType.SlowTime));
+                    break;
+
+                case 3: // 3. Kırılabilir Cam Duvar (Obstacle_GlassWall) + Grow (+)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.HeavySmashWall));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.HeavySmashWall));
+                    break;
+
+                case 4: // 4. İkiz Tünel (Tunnel_Twin) + Split (÷2) & Merge (><)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.TwinSplitTunnels));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.TwinSplitTunnels));
+                    break;
+
+                case 5: // 5A. Çoklu Delik Duvarı — Boyut Seçimi (SizeChoice)
+                    bp.Chunks.Add(MultiHoleChunk(0));
+                    bp.Chunks.Add(MultiHoleChunk(0));
+                    break;
+
+                case 6: // 5B. Çoklu Delik Duvarı — Bölünme Seçimi (SplitChoice)
+                    bp.Chunks.Add(MultiHoleChunk(1));
+                    bp.Chunks.Add(MultiHoleChunk(1));
+                    break;
+
+                case 7: // 5C. Çoklu Delik Duvarı — Risk–Ödül Seçimi (RiskReward) + Star (⭐)
+                    bp.Chunks.Add(MultiHoleChunk(2, true, EndlessPickupType.StarScore));
+                    bp.Chunks.Add(MultiHoleChunk(2, true, EndlessPickupType.StarScore));
+                    break;
+
+                case 8: // 6. Hareketli İkiz Tünel (Tunnel_Moving) + SpeedBoost (⚡)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.MovingTwinTunnels, true, EndlessPickupType.SpeedBoost));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.MovingTwinTunnels, true, EndlessPickupType.SpeedBoost));
+                    break;
+
+                case 9: // 7. Sarkaç (Obstacle_Pendulum) + Shield (🛡)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SwingingPendulum, true, EndlessPickupType.Shield));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SwingingPendulum, true, EndlessPickupType.Shield));
+                    break;
+
+                case 10: // 8. Dönen Engel (Obstacle_Spinner) + Magnet (🧲) & Star (⭐)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SpinnerBar, true, EndlessPickupType.Magnet));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SpinnerBar, true, EndlessPickupType.StarScore));
+                    break;
+
+                case 11: // 9. Faz 4: Esnek Geçit (Gate_FlexibleSqueeze) + Kütle Terazisi (Gate_MassScale)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.FlexibleSqueezeGate));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.MassScaleGate));
+                    break;
+
+                case 12: // 10. Faz 4/6: Hareketli Delik Duvarı (Gate_SlidingHoleWall) + Parçalanma Kapısı (Gate_MicroShatter)
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.SlidingHoleWall));
+                    bp.Chunks.Add(GateChunk(EndlessObstacleType.MicroShatterGate));
+                    break;
+
+                case 13: // 11. Köprü Rampa (JumpRampOverAbyss) + İkiz Köprü (SplitTwinBridge)
+                    bp.Chunks.Add(new TrackChunkSpec { ModuleType = TrackSegmentModuleType.JumpRampOverAbyss });
+                    bp.Chunks.Add(new TrackChunkSpec { ModuleType = TrackSegmentModuleType.SplitTwinBridge });
+                    break;
+
+                case 14: // 12. Yüzey Tuzakları: Mıknatıs Alanı, Yapışkan Zemin, Zıplama Pedi
+                    bp.Chunks.Add(HazardChunk(SurfaceHazardKind.MagneticField));
+                    bp.Chunks.Add(HazardChunk(SurfaceHazardKind.StickyFloor));
+                    bp.Chunks.Add(HazardChunk(SurfaceHazardKind.JumpPad));
+                    break;
+
+                default: // 13. Lazer Kesici + Renk Eşleştirme Kapısı
+                    bp.Chunks.Add(new TrackChunkSpec
+                    {
+                        ModuleType = TrackSegmentModuleType.LaserSlicerGate,
+                        LaserKind = LaserGateKind.BlueVerticalAutoSplitter
+                    });
+                    bp.Chunks.Add(new TrackChunkSpec
+                    {
+                        ModuleType = TrackSegmentModuleType.ColorMatchSection,
+                        ColorIndex = 0
+                    });
+                    break;
+            }
+        }
+
+        private static TrackChunkSpec GateChunk(
+            EndlessObstacleType gate,
+            bool hasBonus = false,
+            EndlessPickupType bonus = EndlessPickupType.StarScore)
+        {
+            return new TrackChunkSpec
+            {
+                ModuleType = TrackSegmentModuleType.StandardRoad,
+                HasGateObstacle = true,
+                GateType = gate,
+                MultiHoleVariant = -1,
+                HasBonusPickup = hasBonus,
+                BonusPickup = bonus
             };
-
-            if (lvl >= 2)
-            {
-                list.Add(TrackSegmentModuleType.LaserSlicerGate);
-            }
-            if (lvl >= 3)
-            {
-                list.Add(TrackSegmentModuleType.DoubleDeckerOverpass);
-                list.Add(TrackSegmentModuleType.SurfaceHazardZone);
-            }
-            if (lvl >= 4)
-            {
-                list.Add(TrackSegmentModuleType.ColorMatchSection);
-            }
-            return list;
         }
 
-        private static TrackChunkSpec CreateStageSpec(int lvl, int stageIdx, List<TrackSegmentModuleType> pool)
+        private static TrackChunkSpec MultiHoleChunk(
+            int variantIndex,
+            bool hasBonus = false,
+            EndlessPickupType bonus = EndlessPickupType.StarScore)
         {
-            // Guarantee signature showcase modules appear early so every level immediately feels rich and varied!
-            TrackSegmentModuleType mod;
-            if (stageIdx == 1)
-                mod = TrackSegmentModuleType.JumpRampOverAbyss;
-            else if (stageIdx == 2)
-                mod = TrackSegmentModuleType.SplitTwinBridge;
-            else if (stageIdx == 3 && lvl >= 1)
-                mod = TrackSegmentModuleType.DoubleDeckerOverpass;
-            else if (stageIdx == 4)
-                mod = TrackSegmentModuleType.LaserSlicerGate;
-            else if (stageIdx == 5)
-                mod = TrackSegmentModuleType.SurfaceHazardZone;
-            else if (stageIdx == 6)
-                mod = TrackSegmentModuleType.ColorMatchSection;
-            else
-                mod = pool[(lvl * 3 + stageIdx * 5) % pool.Count];
-
-            var spec = new TrackChunkSpec
+            return new TrackChunkSpec
             {
-                ModuleType = mod,
-                HasGateObstacle = (mod == TrackSegmentModuleType.StandardRoad || mod == TrackSegmentModuleType.SurfaceHazardZone),
-                GateType = PickGateForLevel(lvl, stageIdx),
-                HazardKind = (SurfaceHazardKind)((lvl + stageIdx) % 4),
-                LaserKind = (stageIdx % 2 == 0) ? LaserGateKind.BlueVerticalAutoSplitter : LaserGateKind.RedHorizontalMassTrimmer,
-                ColorIndex = (lvl + stageIdx) % 3
+                ModuleType = TrackSegmentModuleType.StandardRoad,
+                HasGateObstacle = true,
+                GateType = EndlessObstacleType.MultiHoleDecisionWall,
+                MultiHoleVariant = variantIndex,
+                HasBonusPickup = hasBonus,
+                BonusPickup = bonus
             };
-
-            return spec;
         }
 
-        private static EndlessObstacleType PickGateForLevel(int lvl, int seed)
+        private static TrackChunkSpec HazardChunk(SurfaceHazardKind hazard)
         {
-            // Prioritize the 7 core obstacles shown in the Project Jelly Design Sheet:
-            // SmallCenterHole, VerticalCrusherGate, HeavySmashWall, TwinSplitTunnels, MovingTwinTunnels, SwingingPendulum, SpinnerBar
-            int idx = (lvl * 2 + seed) % 9;
-            switch (idx)
+            return new TrackChunkSpec
             {
-                case 0: return EndlessObstacleType.SmallCenterHole;
-                case 1: return EndlessObstacleType.TwinSplitTunnels;
-                case 2: return EndlessObstacleType.HeavySmashWall;
-                case 3: return EndlessObstacleType.VerticalCrusherGate;
-                case 4: return EndlessObstacleType.MovingTwinTunnels;
-                case 5: return EndlessObstacleType.SwingingPendulum;
-                case 6: return EndlessObstacleType.SpinnerBar;
-                case 7: return EndlessObstacleType.SlidingDoorWall;
-                default: return EndlessObstacleType.PincerShutters;
-            }
+                ModuleType = TrackSegmentModuleType.SurfaceHazardZone,
+                HazardKind = hazard,
+                HasGateObstacle = false,
+                MultiHoleVariant = -1
+            };
         }
     }
 }

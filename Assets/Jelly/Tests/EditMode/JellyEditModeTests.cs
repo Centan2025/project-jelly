@@ -100,6 +100,220 @@ namespace Jelly.Tests.EditMode
         }
 
         [Test]
+        public void Phase2Core1_SmallCenterHole_SuccessFailureBoundaryAndSplitScenarios()
+        {
+            // Success: Small jelly (mass 60 <= 75) aligned at center
+            var pass = Phase2CoreObstacleEvaluator.EvaluateSmallCenterHole(60f, 0f, false);
+            Assert.IsTrue(pass.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.CleanPass, pass.Outcome);
+            Assert.IsFalse(pass.ShatteredCrystal);
+
+            // Boundary mass: exact 75.0 passes, 75.5 fails
+            var boundaryPass = Phase2CoreObstacleEvaluator.EvaluateSmallCenterHole(75.0f, 0f, false);
+            Assert.IsTrue(boundaryPass.CanPass);
+            var boundaryFail = Phase2CoreObstacleEvaluator.EvaluateSmallCenterHole(75.5f, 0f, false);
+            Assert.IsFalse(boundaryFail.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.SolidWallBounce, boundaryFail.Outcome);
+            Assert.IsFalse(boundaryFail.ShatteredCrystal);
+
+            // Failure: Misaligned small jelly hits solid wall
+            var misaligned = Phase2CoreObstacleEvaluator.EvaluateSmallCenterHole(60f, 1.85f, false);
+            Assert.IsFalse(misaligned.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.SolidWallBounce, misaligned.Outcome);
+
+            // Split jelly: centerX = +1.32 -> left fragment at 0.0 (in hole, fragment mass = 120*0.5 = 60 <= 75), right fragment hits wall -> PartialSplitSacrifice
+            var splitSacrifice = Phase2CoreObstacleEvaluator.EvaluateSmallCenterHole(120f, 1.32f, true);
+            Assert.IsTrue(splitSacrifice.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.PartialSplitSacrifice, splitSacrifice.Outcome);
+            Assert.IsTrue(splitSacrifice.SacrificedOneSplitPiece);
+            Assert.AreEqual(0f, splitSacrifice.SurvivingLateralX, 0.01f);
+        }
+
+        [Test]
+        public void Phase2Core2_VerticalCrusherGate_SuccessFailureBoundaryAndSplitScenarios()
+        {
+            // Success: Small jelly (mass 70 <= 75) passes under low crusher (0.65m)
+            var smallPass = Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(70f, 0f, false, 0.65f);
+            Assert.IsTrue(smallPass.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.CleanPass, smallPass.Outcome);
+            Assert.IsFalse(smallPass.ShatteredCrystal);
+
+            // Boundary mass at low crusher (0.65m): 75.0 passes, 76.0 fails when crusher is low
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(75.0f, 0f, false, 0.65f).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(76.0f, 0f, false, 0.65f).CanPass);
+
+            // Timing success: Normal jelly (mass 100) passes when crusher is raised (1.60m), fails when low (0.68m)
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(100f, 0f, false, 1.60f).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(100f, 0f, false, 0.68f).CanPass);
+
+            // Split jelly: Total mass 120 (unsplit fails at 0.68m), when split each fragment is 60 (<= 75) -> passes under low crusher!
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(120f, 0f, false, 0.68f).CanPass);
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateVerticalCrusherGate(120f, 0f, true, 0.68f).CanPass);
+        }
+
+        [Test]
+        public void Phase2Core3_HeavySmashWall_SuccessFailureBoundaryAndSplitScenarios()
+        {
+            // Success: Giant jelly (mass 130 >= 115) aligned with crystal panel shatters crystal
+            var smashPass = Phase2CoreObstacleEvaluator.EvaluateHeavySmashWall(130f, 0f, false);
+            Assert.IsTrue(smashPass.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.CrystalShatterPass, smashPass.Outcome);
+            Assert.IsTrue(smashPass.ShatteredCrystal);
+
+            // Boundary mass: 115.0 shatters crystal, 114.5 bounces off without shattering
+            var boundPass = Phase2CoreObstacleEvaluator.EvaluateHeavySmashWall(115.0f, 0f, false);
+            Assert.IsTrue(boundPass.CanPass);
+            Assert.IsTrue(boundPass.ShatteredCrystal);
+
+            var boundFail = Phase2CoreObstacleEvaluator.EvaluateHeavySmashWall(114.5f, 0f, false);
+            Assert.IsFalse(boundFail.CanPass);
+            Assert.IsFalse(boundFail.ShatteredCrystal);
+            Assert.AreEqual(Phase2ObstacleOutcome.SolidWallBounce, boundFail.Outcome);
+
+            // Split jelly: Total mass 180 -> split fragments have 90 mass each (< 115) -> CANNOT shatter crystal!
+            var splitInsufficient = Phase2CoreObstacleEvaluator.EvaluateHeavySmashWall(180f, 0f, true);
+            Assert.IsFalse(splitInsufficient.CanPass);
+            Assert.IsFalse(splitInsufficient.ShatteredCrystal);
+
+            // Split jelly with massive total mass 240 -> each fragment has 120 (>= 115) -> CAN shatter crystal!
+            var splitMassive = Phase2CoreObstacleEvaluator.EvaluateHeavySmashWall(240f, 0f, true);
+            Assert.IsTrue(splitMassive.CanPass);
+            Assert.IsTrue(splitMassive.ShatteredCrystal);
+        }
+
+        [Test]
+        public void Phase2Core4_TwinSplitTunnels_SuccessFailureBoundaryAndSplitScenarios()
+        {
+            // Success: Split jelly (total mass 120 -> 60 each) centered at 0 -> left=-1.32, right=+1.32 -> both in tunnels!
+            var twinPass = Phase2CoreObstacleEvaluator.EvaluateTwinSplitTunnels(120f, 0f, true);
+            Assert.IsTrue(twinPass.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.CleanPass, twinPass.Outcome);
+            Assert.IsFalse(twinPass.ShatteredCrystal);
+
+            // Failure: Unsplit jelly centered at 0 hits the solid center divider
+            var centerHit = Phase2CoreObstacleEvaluator.EvaluateTwinSplitTunnels(90f, 0f, false);
+            Assert.IsFalse(centerHit.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.SolidWallBounce, centerHit.Outcome);
+
+            // Boundary mass in single side tunnel: unsplit at X=-1.45 with mass 95.0 passes, 96.0 fails
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateTwinSplitTunnels(95.0f, -1.45f, false).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateTwinSplitTunnels(96.0f, -1.45f, false).CanPass);
+
+            // Split partial sacrifice: shifted to X=+1.32 -> left fragment at 0.0 (hits center pillar), right fragment at +2.64 (hits outer wall) -> bounce;
+            // shifted to X=+0.50 -> left fragment at -0.82 (inside left tunnel), right fragment at +1.82 (inside right tunnel);
+            // shifted to X=+1.15 -> left fragment at -0.17 (hits center pillar!), right fragment at +2.47 (hits outer post) -> bounce;
+            // shifted to X=-0.95 -> left fragment at -2.27 (inside left tunnel), right fragment at +0.37 (hits center pillar!) -> PartialSplitSacrifice!
+            var partial = Phase2CoreObstacleEvaluator.EvaluateTwinSplitTunnels(120f, -0.95f, true);
+            Assert.IsTrue(partial.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.PartialSplitSacrifice, partial.Outcome);
+            Assert.IsTrue(partial.SacrificedOneSplitPiece);
+        }
+
+        [Test]
+        public void Phase2Core5_MultiHoleDecisionWall_AllThreeVariantsAndCustomConfig()
+        {
+            // Variant 1: SizeChoice (Left Small <=75 at X=-1.55, Right Normal 76..114 at X=+1.55)
+            var sizeCfg = MultiHoleWallConfig.CreateSizeChoicePreset();
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(sizeCfg, 70f, -1.55f, false).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(sizeCfg, 95f, -1.55f, false).CanPass); // Too big for left small hole
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(sizeCfg, 95f, +1.55f, false).CanPass);  // Fits right normal hole
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(sizeCfg, 120f, +1.55f, false).CanPass); // Too big for normal hole (115+)
+
+            // Variant 2: SplitChoice (Center Single <=70 at X=0, Twin Split at X=+-1.32 requiring split state)
+            var splitCfg = MultiHoleWallConfig.CreateSplitChoicePreset();
+            // Single small jelly (mass 68 <= 70) passes center hole
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(splitCfg, 68f, 0f, false).CanPass);
+            // Single large jelly (mass 100) blocked at center AND blocked at side twin hole when unsplit
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(splitCfg, 100f, 0f, false).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(splitCfg, 70f, -1.32f, false).CanPass);
+            // Split jelly (total mass 120 -> 60 each <= 85) centered at X=0 passes both left (-1.32) and right (+1.32) holes!
+            var splitTwinRes = Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(splitCfg, 120f, 0f, true);
+            Assert.IsTrue(splitTwinRes.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.CleanPass, splitTwinRes.Outcome);
+
+            // Variant 3: RiskRewardChoice (Left Safe <=114 at X=-1.45, Right Bonus <=68 at X=+1.65)
+            var riskCfg = MultiHoleWallConfig.CreateRiskRewardPreset();
+            var safePass = Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(riskCfg, 100f, -1.45f, false);
+            Assert.IsTrue(safePass.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.CleanPass, safePass.Outcome);
+            Assert.AreEqual(30, safePass.ScoreAwarded);
+
+            var bonusPass = Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(riskCfg, 65f, +1.65f, false);
+            Assert.IsTrue(bonusPass.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.BonusRiskPass, bonusPass.Outcome);
+            Assert.AreEqual(90, bonusPass.ScoreAwarded);
+            Assert.AreEqual(2, bonusPass.ComboIncrement);
+
+            // Boundary on Risk hole: 68.0 passes, 69.0 fails
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(riskCfg, 68.0f, +1.65f, false).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMultiHoleWall(riskCfg, 69.0f, +1.65f, false).CanPass);
+        }
+
+        [Test]
+        public void Phase3MobileHUD_CapabilityIconsAndContextualButton_WorkCorrectly()
+        {
+            // 1) Mass 70 (<= 75): Small Gate icon lit, contextual button = "÷2  BÖLÜN", combo hidden when 0
+            var vm70 = Phase3MobileHUDSystem.BuildViewModel(70f, false, 145.8f, 0, 0f, false);
+            Assert.IsTrue(vm70.IsSmallGateIconLit);
+            Assert.IsFalse(vm70.IsNormalSplitIconLit);
+            Assert.IsFalse(vm70.IsCrystalSmashIconLit);
+            Assert.AreEqual(145, vm70.DistanceMeters);
+            Assert.AreEqual(ContextualActionKind.Split, vm70.ActionKind);
+            Assert.IsTrue(vm70.ActionButtonInteractable);
+            Assert.IsFalse(vm70.ShowComboBadge);
+            Assert.IsFalse(vm70.ShowTransientBanner);
+            Assert.IsFalse(vm70.ShowPowerupPill);
+
+            // 2) Mass 120 (>= 115): Crystal Smash icon lit
+            var vm120 = Phase3MobileHUDSystem.BuildViewModel(120f, false, 210f, 4, 1.5f, true);
+            Assert.IsFalse(vm120.IsSmallGateIconLit);
+            Assert.IsFalse(vm120.IsNormalSplitIconLit);
+            Assert.IsTrue(vm120.IsCrystalSmashIconLit);
+            Assert.IsTrue(vm120.ShowComboBadge);
+            Assert.AreEqual(3, vm120.LiveComboMultiplier);
+            Assert.IsTrue(vm120.ShowTransientBanner);
+            Assert.IsTrue(vm120.ShowPowerupPill);
+
+            // 3) Split state (total mass 120 -> 60 per piece): contextual button switches to "><  BİRLEŞ" & effective piece lights SmallGate icon
+            var vmSplit = Phase3MobileHUDSystem.BuildViewModel(120f, true, 220f, 1, 0f, false);
+            Assert.AreEqual(60f, vmSplit.EffectivePieceMass, 0.01f);
+            Assert.IsTrue(vmSplit.IsSmallGateIconLit);
+            Assert.AreEqual(ContextualActionKind.Merge, vmSplit.ActionKind);
+
+            // 4) Single contextual button toggle behavior
+            Assert.IsTrue(Phase3MobileHUDSystem.TryExecuteContextualAction(false, 90f, out bool afterSplit));
+            Assert.IsTrue(afterSplit);
+            Assert.IsTrue(Phase3MobileHUDSystem.TryExecuteContextualAction(true, 90f, out bool afterMerge));
+            Assert.IsFalse(afterMerge);
+            Assert.IsFalse(Phase3MobileHUDSystem.TryExecuteContextualAction(false, 30f, out _));
+        }
+
+        [Test]
+        public void Phase4And6_NewObjectFamilies_Scenarios_PassAndFail()
+        {
+            // 1) Esnek Geçit (FlexibleSqueezeGate): <= 88 mass passes at center
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateFlexibleSqueezeGate(88f, 0f, false).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateFlexibleSqueezeGate(92f, 0f, false).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateFlexibleSqueezeGate(70f, 1.5f, false).CanPass);
+
+            // 2) Kütle Terazisi (MassScaleGate): >= 105 total mass opens scale door
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateMassScaleGate(105f, 0f, false).CanPass);
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateMassScaleGate(110f, 0f, true).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMassScaleGate(100f, 0f, false).CanPass);
+
+            // 3) Hareketli Delik Duvarı (SlidingHoleWall): must match moving hole X and mass <= 95
+            Assert.IsTrue(Phase2CoreObstacleEvaluator.EvaluateSlidingHoleWall(85f, 1.10f, false, 1.15f).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateSlidingHoleWall(85f, -1.20f, false, 1.15f).CanPass);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateSlidingHoleWall(110f, 1.15f, false, 1.15f).CanPass);
+
+            // 4) Parçalanma Kapısı (MicroShatterGate - Faz 6): >= 50 mass in grid passes with bonus combo
+            var shatterRes = Phase2CoreObstacleEvaluator.EvaluateMicroShatterGate(80f, 0f, false);
+            Assert.IsTrue(shatterRes.CanPass);
+            Assert.AreEqual(Phase2ObstacleOutcome.BonusRiskPass, shatterRes.Outcome);
+            Assert.IsFalse(Phase2CoreObstacleEvaluator.EvaluateMicroShatterGate(40f, 0f, false).CanPass);
+        }
+
+        [Test]
         public void LevelValidator_ValidatesAll50LevelsAndRejectsInvalidData()
         {
             var catalog = JellyLevelCatalogFactory.CreateFullCatalog50();

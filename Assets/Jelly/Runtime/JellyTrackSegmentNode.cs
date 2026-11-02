@@ -9,7 +9,7 @@ namespace Jelly
         JumpRampOverAbyss,      // Zıplama rampası + Uçurum + Havadaki Halka
         DoubleDeckerOverpass,   // 2 Katlı Yol: Rampa ile çıkılan Üst Geçit (Cam zeminli) + Alt Tünel
         LaserSlicerGate,        // Mavi Dikey Lazer (Jöleyi ÷2 böler) veya Kırmızı Yatay Tıraşlayıcı Lazer
-        SurfaceHazardZone,      // Buz Zemin, Yana İten Konveyör Bant veya Kütle Eriten Slime Çamuru
+        SurfaceHazardZone,      // Buz Zemin, Yana İten Konveyör Bant, Manyetik Alan, Yapışkan Zemin, Zıplama Pedi
         ColorMatchSection,      // Boya Havuzu (Mavi/Altın/Mor) + Aynı Renk Enerji Kapısı
         LevelFinaleMultiplier   // Bölüm Sonu x2, x3, x5, x10 Kırılabilir Çarpan Duvarları & Bitiş!
     }
@@ -19,7 +19,10 @@ namespace Jelly
         IceDrift,               // Kaygan buz
         ConveyorPushLeft,       // Sola iten konveyör bant
         ConveyorPushRight,      // Sağa iten konveyör bant
-        SlimeMassDrain          // Kenarlarda kütle eriten zehirli slime şeritleri
+        SlimeMassDrain,         // Kenarlarda kütle eriten zehirli slime şeritleri
+        MagneticField,          // Faz 4: Manyetik Alan (Jöleyi sağa veya sola çeker)
+        StickyFloor,            // Faz 4: Yapışkan Zemin (Hızı düşürür, hareket kontrolünü değiştirir)
+        JumpPad                 // Faz 4: Zıplama Pedi (Jöleyi üst seviyeye fırlatır)
     }
 
     public enum LaserGateKind

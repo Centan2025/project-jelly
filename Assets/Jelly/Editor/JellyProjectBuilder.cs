@@ -50,7 +50,7 @@ namespace Jelly.Editor
                 FocusSceneViewOnPlayer();
             }
 
-            string snapDir = "C:/Users/ASUS/.gemini/antigravity/brain/b23231de-0eec-442f-8595-e27723cdca44";
+            string snapDir = Path.GetFullPath(Path.Combine(Application.dataPath, "../Snapshots"));
             if (endless != null && !File.Exists(Path.Combine(snapDir, "unity_piston_gate.png")))
             {
                 endless.RenderComparisonSnapshotsToDisk(snapDir);
@@ -186,7 +186,7 @@ namespace Jelly.Editor
             if (endless != null)
             {
                 endless.BuildInitialPreviewInEditor(endless.primaryPlayer);
-                string snapDir = "C:/Users/ASUS/.gemini/antigravity/brain/b23231de-0eec-442f-8595-e27723cdca44";
+                string snapDir = Path.GetFullPath(Path.Combine(Application.dataPath, "../Snapshots"));
                 endless.RenderComparisonSnapshotsToDisk(snapDir);
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
                 EditorSceneManager.SaveOpenScenes();

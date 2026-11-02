@@ -37,3 +37,16 @@ crashlytics-build.properties
 
 .vercel
 .env*
+
+__pycache__/
+*.pyc
+*.blend
+*.blend1
+Blender/*_log*.txt
+Blender/renders/
+Assets/Jelly/Models/*.glb
+Assets/Jelly/Models/*.glb.meta
+Assets/_Recovery/
+Assets/_Recovery.meta
+Snapshots/
+fix_antigravity_permissions.ps1
