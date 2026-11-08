@@ -4,7 +4,7 @@
 **Project Jelly**, Unity 6 (`6000.5.6f1`, URP `17.0.1`) ile geliştirilmiş 3B hiper-gündelik morfoloji (büyüme/küçülme), ikiz bölünme (`÷2`), birleşme (`><`) ve 8 modüler pist segmentine sahip koşu oyunudur (`Jelly.Runtime`, `Jelly.Editor`, `Jelly.Tests.*`) `[VERIFIED]`. Statik web vitrini (`index.html`, `vercel.json`) kök dizindedir `[VERIFIED]`.
 
 ## Temel Komutlar (Unity CLI & Git)
-- **Durum & Son Fark:** `git status --short` | `git diff 96fe4e1..HEAD --name-status`
+- **Durum & Son Fark:** `git status --short` | `git diff <Last_Verified_Commit>..HEAD --name-status`
 - **Varlık/Sahne Üretimi:** `Jelly -> Generate All Project Assets & Scenes` (`JellyProjectBuilder.GenerateAll`)
 - **EditMode Testleri:** `Unity.exe -batchmode -projectPath . -runTests -testPlatform EditMode -testResults Logs/EditModeResults.xml -quit`
 - **PlayMode Testleri:** `Unity.exe -batchmode -projectPath . -runTests -testPlatform PlayMode -testResults Logs/PlayModeResults.xml -quit`
@@ -24,9 +24,10 @@
 | Ölçüm Raporu & Arşiv | `Docs/ai-context/measurement.md` / `Docs/ai-context/history/` | **L3** |
 
 ## V2.1 AI Kod Araştırma ve Hafıza Disiplini
-1. **Wake-up:** `current-state.md` ve aktif handoff oku -> Serena `activate_project` çağır -> `git diff 96fe4e1..HEAD --name-status` ile `evidence-index.md` kontrol et -> İlgili modül için Context Capsule oluştur.
+1. **Wake-up:** `current-state.md` ve aktif handoff oku -> Serena `activate_project` çağır -> `git diff <commit>..HEAD --name-status` ile `evidence-index.md` kontrol et -> İlgili modül için Context Capsule oluştur.
 2. **Serena İki Aşamalı Protokol:**
    - **Seviye A (Kısa — Varsayılan):** Önce sembol adı, tür ve satır aralığını al (`include_body=False`); fonksiyon gövdelerini varsayılan olarak yükleme.
    - **Seviye B (Derin):** Yalnızca mantık değişikliği, güvenlik analizi veya veri akışı gerektiğinde gövdeyi aç. Dil sunucusu yoksa `module-map.md` + hedefli `grep` kullan.
-3. **Check-in & Handoff:** Görev bitiminde `current-state.md` (<=50 satır) delta güncelle; kararları `decisions.md` ve `evidence-index.md` içine mühürle; yarım kalan işleri handoff kaydına yaz.
-4. **Güvenlik Sınırı:** Secret, token, `.env` asla hafızaya yazılmaz. Göreli dosya yolu kullanılır. Onaysız `git commit`, `git push` veya deploy yapılamaz.
+3. **Basic Memory & Markdown SSOT:** `Docs/ai-context/*.md` birincil kaynaktır; `main` alanına yazılmaz, projeye özel ad alanı salt-okunur (Test E) sorgulanır.
+4. **Check-in & Handoff:** Görev bitiminde `current-state.md` (<=50 satır) delta güncelle; kararları `decisions.md` ve `evidence-index.md` içine mühürle; yarım kalan işleri handoff kaydına yaz.
+5. **Güvenlik Sınırı:** Secret, token, `.env` asla hafızaya yazılmaz. Göreli dosya yolu kullanılır. Onaysız `git commit`, `git push` veya deploy yapılamaz.

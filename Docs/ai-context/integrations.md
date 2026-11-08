@@ -38,4 +38,9 @@
 
 ## 5. MCP Sunucuları ve Çoklu Proje Bağlamı
 - **Mevcut Ortam MCP Sunucusu:** `science_biomolecular_structure_viewer_mcp` (Bilimsel 3B molekül görüntüleyici; bu Unity oyun projesiyle doğrudan ilişkisi yoktur) `[VERIFIED]`.
-- **Serena MCP & Hafıza:** `.serena/project.yml` ve `.serena/memories/` Git ile taşınabilir şekilde yapılandırılmıştır; kurulum adımları `docs/ai-context/setup.md` içindedir `[VERIFIED]`.
+- **Serena MCP & Hafıza:** `.serena/project.yml` ve `.serena/memories/` Git ile taşınabilir şekilde yapılandırılmıştır; kurulum adımları `Docs/ai-context/setup.md` içindedir `[VERIFIED]`.
+- **Basic Memory İzolasyon Standardı:**
+  - **Tek Doğruluk Kaynağı (SSOT):** Proje deposundaki `Docs/ai-context/*.md` dosyaları birincil doğruluk kaynağıdır `[VERIFIED]`.
+  - **Projeye Özgü Ad Alanı:** Basic Memory'ye yazılması gerektiğinde mutlaka projeye özgü ad alanı (`project="JellyShift"`) hedeflenir `[VERIFIED]`.
+  - **`main` Alanına Yazma Yasağı:** Global `main` alanı genel sistem alanıdır; bu projeye varsayılan yazma hedefi olarak **asla kullanılamaz** `[VERIFIED]`.
+  - **Salt-Okunur Keşif (Test E):** Bağlantı ve durum doğrulamaları `bm_project(command="list")` ile salt-okunur yapılır; kullanıcı onayı olmadan proje oluşturulmaz, test verisi yazılmaz veya kayıt silinmez `[VERIFIED]`.

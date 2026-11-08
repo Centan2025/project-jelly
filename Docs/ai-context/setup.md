@@ -10,8 +10,8 @@ git clone <REPO_URL> JellyShift
 cd JellyShift
 git status --short
 ```
-- Klonlama sonrasında `AGENTS.md`, `docs/ai-context/*` ve `.agents/skills/memory-manager/SKILL.md` dosyaları otomatik olarak gelir `[VERIFIED]`.
-- Yeni oturum açan ajan otomatik olarak önce `AGENTS.md` (L1) ve `docs/ai-context/current-state.md` (L2) dosyalarını okur.
+- Klonlama sonrasında `AGENTS.md`, `Docs/ai-context/*` ve `.agents/skills/memory-manager/SKILL.md` dosyaları otomatik olarak gelir `[VERIFIED]`.
+- Yeni oturum açan ajan otomatik olarak önce `AGENTS.md` (L1) ve `Docs/ai-context/current-state.md` (L2) dosyalarını okur.
 
 ---
 
@@ -30,11 +30,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ---
 
-## 3. Serena MCP Kurulumu (LSP / Sembol Tabanlı Akıllı Kod Erişimi)
-Serena MCP, C# dosyalarını baştan sona okumak yerine doğrudan sınıf/metot sembollerini (`get_symbols_overview`, `find_symbol`, `find_referencing_symbols`) sorgulamayı sağlar.
+## 3. Serena & Basic Memory MCP Kurulumu
 
 ### Antigravity / MCP Yapılandırması (`mcp_config.json`)
-Kullanıcı MCP yapılandırma dosyanıza (`~/.gemini/antigravity/mcp_config.json` veya IDE MCP ayarlarına) şu sunucuyu ekleyin:
+Kullanıcı MCP yapılandırma dosyanıza (`~/.gemini/antigravity/mcp_config.json` veya IDE MCP ayarlarına) şu sunucuları ekleyin:
 
 ```json
 {
@@ -61,12 +60,16 @@ Kullanıcı MCP yapılandırma dosyanıza (`~/.gemini/antigravity/mcp_config.jso
 }
 ```
 
-### Serena Proje Aktivasyonu ve `.gitignore` Standardı
+### 3.1. Serena Proje Aktivasyonu ve `.gitignore` Standardı
 - `.gitignore` dosyasında `.serena/*` önbellek dosyaları dışlanmış, ancak `!.serena/project.yml` ve `!.serena/memories/` korunmuştur `[VERIFIED]`.
-- Serena MCP aktif olduğunda oturum başında şu araç çağrılır:
-  - `activate_project` (proje kök dizini veya proje adı ile)
-  - `get_symbols_overview` / `find_symbol`
-- **Yedek (Fallback) Modu:** Eğer bilgisayarda henüz Serena MCP kurulu değilse, ajan `docs/ai-context/module-map.md` dosyasından ilgili C# dosyasını bulur ve `Select-String` / `ripgrep` (`rg`) ile hedef satır numarasını tespit ederek yalnızca ilgili satır aralığını (`StartLine`–`EndLine`) okur `[VERIFIED]`.
+- Serena MCP aktif olduğunda oturum başında `activate_project` çağrılır.
+- **Yedek (Fallback) Modu:** Eğer bilgisayarda henüz `csharp-ls` / Serena dil sunucusu kurulu değilse, ajan `Docs/ai-context/module-map.md` dosyasından ilgili C# dosyasını bulur ve `s.fs.search_for_pattern` / `Select-String` ile hedef satır numarasını tespit ederek yalnızca ilgili satır aralığını (`StartLine`–`EndLine`) okur `[VERIFIED]`.
+
+### 3.2. Basic Memory Proje İzolasyonu ve Markdown SSOT Standardı
+- **Tek Doğruluk Kaynağı (SSOT):** Versiyonlanan `Docs/ai-context/*.md` dosyaları projenin ana hafıza otoritesidir `[VERIFIED]`.
+- **Projeye Özel Ad Alanı:** Basic Memory çağrılarında daima projeye özgü `project="JellyShift"` parametresi kullanılır `[VERIFIED]`.
+- **`main` Alanına Yazma Yasağı:** Ortak/global `main` alanı proje verisi için asla varsayılan yazma hedefi yapılamaz `[VERIFIED]`.
+- **Salt-Okunur Keşif (Test E):** Bağlantı testleri yalnızca `bm_project(command="list")` ile yürütülür; izinsiz proje oluşturulmaz veya test notu yazılmaz `[VERIFIED]`.
 
 ---
 

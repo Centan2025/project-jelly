@@ -8,7 +8,7 @@ description: Oturum başında proje hafızasını (Docs/ai-context) doğrular, C
 Bu beceri, ajanların tüm kod tabanını gereksiz taramasını önleyen, L1/L2/L3 katmanlarını yöneten ve görevler arası bağlam devrini sağlayan protokolü tanımlar.
 
 ## 1. Oturum Başlangıcı (Wake-up)
-1. `AGENTS.md` ve `Docs/ai-context/current-state.md` dosyalarını oku; `Last Verified Commit` (`96fe4e1`) değerini al.
+1. `AGENTS.md` ve `Docs/ai-context/current-state.md` dosyalarını oku; `Last Verified Commit` (`e7eba30`) değerini al.
 2. Aktif handoff kaydı (`.handoff.local.md` veya `Docs/ai-context/handoff.md`) olup olmadığını kontrol et; görev önceki işin devamıysa buradan sürdür.
 3. Serena MCP mevcutsa proje için `activate_project` çalıştır.
 4. `git status --short` ve `git diff <Last_Verified_Commit>..HEAD --name-status` çalıştır.
@@ -35,3 +35,9 @@ Bu beceri, ajanların tüm kod tabanını gereksiz taramasını önleyen, L1/L2/
 2. Görev sonunda tüm hafızayı baştan yazma; yalnızca değişen kısımları (delta) güncelle.
 3. `Docs/ai-context/current-state.md` dosyasını <= 50 satırda tut; eski tamamlanan maddeleri `Docs/ai-context/history/` altına arşivle.
 4. Secret, token veya `.env` değerlerini asla hafızaya yazma; daima göreli dosya yolları kullan.
+
+## 6. Basic Memory İzolasyon ve Senkronizasyon Standardı
+1. Git deposundaki `Docs/ai-context/*.md` dosyaları daima birincil doğruluk kaynağıdır (SSOT).
+2. Basic Memory çağrılarında daima projeye özgü ad alanını (`project="JellyShift"`) hedefle.
+3. `main` alanı global/ortak sistem alanıdır; hiçbir projeye varsayılan yazma hedefi olarak **kullanılamaz**.
+4. Basic Memory üzerindeki sorgulamaları salt-okunur yürüt (`Test E`); izinsiz proje oluşturma, silme, taşıma veya test verisi yazma yapma.

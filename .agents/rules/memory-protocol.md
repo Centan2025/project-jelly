@@ -1,5 +1,5 @@
 ---
-description: L1/L2/L3 Kalıcı Proje Hafızası, Context Capsule ve Serena V2.1 Kuralları
+description: L1/L2/L3 Kalıcı Proje Hafızası, Context Capsule, Serena ve Basic Memory V2.1 Kuralları
 ---
 
 # Proje Hafıza ve Token Optimizasyon Kuralı (AI Context V2.1)
@@ -10,7 +10,11 @@ description: L1/L2/L3 Kalıcı Proje Hafızası, Context Capsule ve Serena V2.1 
 2. **Context Capsule & Hedefli Kod Erişimi:**
    - C# kaynak dosyalarını (özellikle `Assets/Jelly/Runtime/EndlessTrackManager.cs` gibi büyük dosyaları) `Read` ile baştan sona okuma.
    - Önce `Docs/ai-context/module-map.md` ile hedef sınıfı bul; ardından Serena Seviye A (`include_body=False`) veya hedefli `Select-String` / `grep` ile satır bulup yalnız ilgili satır aralığını oku.
-3. **Görev Sonu (Check-in & Handoff):**
+3. **Basic Memory İzolasyonu & Markdown SSOT:**
+   - Proje deposundaki `Docs/ai-context/*.md` dosyaları daima tek doğruluk kaynağıdır (SSOT).
+   - Proje verisi için `main` ortak alanı kullanılamaz; daima projeye özgü ad alanı (`project="JellyShift"`) hedeflenir.
+   - Sorgulamalar salt-okunur (Test E) yapılır; kullanıcı onayı olmadan proje oluşturulmaz veya test verisi yazılmaz.
+4. **Görev Sonu (Check-in & Handoff):**
    - Görev sonunda `.agents/skills/memory-manager/SKILL.md` protokolüne uyarak `Docs/ai-context/current-state.md` (<=50 satır) ve `Docs/ai-context/decisions.md` dosyalarında yalnızca değişen kısımları (delta) güncelle.
    - Yarım kalan görevleri `.handoff.local.md` (veya `Docs/ai-context/handoff.md`) içine kaydet.
    - Hafıza dosyalarında mutlak yol veya secret/token kullanma; daima göreli yol (`Assets/...`) kullan.
