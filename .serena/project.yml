@@ -1,0 +1,12 @@
+# Serena Project Configuration (Portable across machines)
+project_name: "JellyShift"
+language: "csharp"
+ignored_paths:
+  - "Library/"
+  - "Temp/"
+  - "Obj/"
+  - "Build/"
+  - "Builds/"
+  - "Logs/"
+  - "UserSettings/"
+  - ".vercel/"

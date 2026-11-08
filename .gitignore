@@ -50,3 +50,8 @@ Assets/_Recovery/
 Assets/_Recovery.meta
 Snapshots/
 fix_antigravity_permissions.ps1
+
+# Serena MCP cache exclusion (keep portable config and memories)
+.serena/*
+!.serena/project.yml
+!.serena/memories/
