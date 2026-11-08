@@ -1,62 +1,37 @@
 ---
 name: memory-manager
-description: L1/L2/L3 kalıcı proje hafızasını yönetir. Her oturum başında (Wake-up) git diff doğrulaması ve Serena activate_project çağrısı yapar; her görev sonunda (Check-in) yalnızca değişen kısımları (delta) günceller ve eski kayıtları arşivler.
+description: Oturum başında proje hafızasını (Docs/ai-context) doğrular, Context Capsule ve iki aşamalı Serena protokolüyle bağlamı hedefler, görev devrini (handoff) ve görev sonu delta güncellemelerini yönetir.
 ---
 
-# Memory Manager Skill (L1 / L2 / L3 Bağlam & Token Optimizasyonu)
+# Hafıza Yönetim ve Bağlam Optimizasyon Protokolü (V2.1)
 
-Bu skill, ajanların her oturumda tüm kod tabanını baştan sona taramasını önlemek ve proje hafızasını GitHub üzerinden taşınabilir, şişmeyen bir yapıda tutmak için kullanılır.
+Bu beceri, ajanların tüm kod tabanını gereksiz taramasını önleyen, L1/L2/L3 katmanlarını yöneten ve görevler arası bağlam devrini sağlayan protokolü tanımlar.
 
----
+## 1. Oturum Başlangıcı (Wake-up)
+1. `AGENTS.md` ve `Docs/ai-context/current-state.md` dosyalarını oku; `Last Verified Commit` (`96fe4e1`) değerini al.
+2. Aktif handoff kaydı (`.handoff.local.md` veya `Docs/ai-context/handoff.md`) olup olmadığını kontrol et; görev önceki işin devamıysa buradan sürdür.
+3. Serena MCP mevcutsa proje için `activate_project` çalıştır.
+4. `git status --short` ve `git diff <Last_Verified_Commit>..HEAD --name-status` çalıştır.
+5. Görevle ilgisiz L3 dosyalarını otomatik yükleme.
 
-## 1. Oturum Başlangıcı Protokolü (Wake-up)
+## 2. Görev Yönlendirme & Context Capsule
+1. Görevi sınıflandır (UI/UX, Bug fix, Physics, Level, Performance, Refactor, Docs, Testing).
+2. `Docs/ai-context/module-map.md` tablosundan ilgili modülü bul.
+3. Gerekliyse `Docs/ai-context/decisions.md` ve `Docs/ai-context/integrations.md` içindeki ilgili kayıtları seç.
+4. Oturum belleğinde `Docs/ai-context/context-capsule.md` şemasına uygun kompakt bir Context Capsule oluştur.
 
-Yeni bir oturumda veya görev başında şu adımları **sırasıyla** uygula:
+## 3. Serena İki Aşamalı Sonuç Protokolü
+- **Seviye A (Kısa Sonuç — Varsayılan):** `s.lsp.get_symbols_overview` ve `s.lsp.find_symbol(..., include_body=False, include_info=True)` ile yalnız sembol adı, türü, dosya yolu, satır aralığı ve referans konumlarını al.
+- **Seviye B (Ayrıntılı Okuma):** Yalnızca iş mantığı değiştirilecekse, veri akışı belirsizse veya güvenlik incelemesi yapılıyorsa sembol gövdesini (`include_body=True`) veya ilgili satır aralığını aç.
+- **Fallback:** Dil sunucusu başlatılamadığında `s.fs.search_for_pattern` veya hedefli `Select-String` / `grep` ile satır bul.
 
-1. **L1 & L2 Okuma:**
-   - `AGENTS.md` (L1, ≤60 satır) ve `docs/ai-context/current-state.md` (L2, ≤50 satır) dosyalarını oku.
-   - L3 dosyalarını (`architecture.md`, `decisions.md`, `integrations.md`, `setup.md`, `history/*`) görev doğrudan gerektirmedikçe **okuma**.
-2. **Serena MCP Aktivasyonu (Varsa):**
-   - Ortamda Serena MCP sunucusu tanımlıysa `activate_project` aracını çağır.
-   - Sembol aramalarında dosyaları baştan sona `Read` etmek yerine `get_symbols_overview` ve `find_symbol` araçlarını kullan.
-   - Serena aktif değilse `docs/ai-context/module-map.md` + `Select-String`/`grep` ile hedef satır numarasını bulup yalnızca ilgili satır aralığını (`StartLine`–`EndLine`) oku.
-3. **Git Delta Doğrulaması:**
-   - `current-state.md` içindeki `Last Verified Commit` değerini al ve şu komutu çalıştır:
-     ```powershell
-     git status --short
-     git diff <Last_Verified_Commit>..HEAD --stat
-     ```
-   - Eğer `<Last_Verified_Commit>` ile `HEAD` arasında fark varsa yalnızca değişen dosyaları incele ve `current-state.md` içindeki eski bilgileri güncelle veya `[STALE]` olarak işaretle.
+## 4. Dosya Değişikliğine Bağlı Hafıza Geçerliliği (Evidence Invalidation)
+1. Değişen dosyaları `Docs/ai-context/evidence-index.md` içindeki `source_paths` ile eşleştir.
+2. Yalnızca etkilenen kayıtları incele; değişmişse `[STALE]`, çelişiyorsa `[CONFLICT]`, doğrulandıysa güncel commit ile `[VERIFIED]` işaretle.
+3. Global Git hook (`core.hooksPath`) ayarlarını değiştirme.
 
----
-
-## 2. Görev Sırasında Kod Erişim Disiplini
-
-- **Kesin Kural:** `Assets/Jelly/Runtime/EndlessTrackManager.cs` (~210 KB) gibi büyük dosyaları asla tek seferde `Read` aracına verme.
-- Önce `docs/ai-context/module-map.md` tablosundan ilgili sınıfı bul, ardından `find_symbol` veya `Select-String -Path <dosya> -Pattern "<sembol>"` ile satır numarasını tespit et.
-- Sohbet ekranına (chat) uzun kod blokları veya mimari açıklamalar yazma; çıktıları doğrudan hedef `.md` veya kaynak dosyalarına yaz.
-
----
-
-## 3. Görev Sonu Protokolü (Check-in & Delta Güncelleme)
-
-Bir görev tamamlandığında tüm hafıza dosyalarını baştan yazma; yalnızca **delta (fark)** güncellemesi yap:
-
-1. **`docs/ai-context/current-state.md` Güncellemesi (Maksimum 50 Satır):**
-   - `Last Verified Commit` alanını `git rev-parse --short HEAD` çıktısıyla güncelle.
-   - Tamamlanan işi tek maddede `[VERIFIED]` etiketiyle ekle.
-   - Gerçekte çalıştırılan testleri `[VERIFIED]`, yalnızca eski rapordan okunanları `[REPORTED]`, test edilmeyenleri `[UNVERIFIED]` olarak işaretle.
-   - Dosya 50 satırı aşarsa en eski tamamlanan maddeleri `docs/ai-context/history/YYYY-MM-DD-<konu>.md` dosyasına taşı.
-2. **`docs/ai-context/decisions.md` Güncellemesi:**
-   - Görev sırasında yeni bir mimari/teknik karar alındıysa dosya sonuna yeni bir `ADR-XXX` maddesi (`#etiket`, göreli dosya yolu, commit hash ve `[VERIFIED]` etiketiyle) ekle.
-   - Eski bir kararla çelişen durum varsa eski kararı silmeden `[CONFLICT]` veya `[STALE]` olarak işaretle.
-3. **`docs/ai-context/module-map.md` Güncellemesi:**
-   - Yalnızca yeni bir sınıf/dosya eklendiyse veya taşındıysa ilgili satırı güncelle.
-
----
-
-## 4. Güvenlik ve Taşınabilirlik Kuralları
-
-- **Sıfır Secret:** `.env`, `.env.local`, API anahtarı, token veya parolaları asla hafıza dosyalarına yazma.
-- **Göreli Yol Standardı:** Hafıza dosyalarında `C:\Users\...` gibi mutlak yollar yerine daima proje köküne göre göreli yollar (`Assets/Jelly/Runtime/...`, `docs/ai-context/...`) kullan.
-- **Onaysız Push Yasağı:** Kullanıcı açıkça onay vermeden `git push` çalıştırma.
+## 5. Handoff, Check-in ve Arşivleme
+1. Kesintiye uğrayan görevleri `.handoff.local.md` (veya şablon olarak `Docs/ai-context/handoff.md`) içine kaydet.
+2. Görev sonunda tüm hafızayı baştan yazma; yalnızca değişen kısımları (delta) güncelle.
+3. `Docs/ai-context/current-state.md` dosyasını <= 50 satırda tut; eski tamamlanan maddeleri `Docs/ai-context/history/` altına arşivle.
+4. Secret, token veya `.env` değerlerini asla hafızaya yazma; daima göreli dosya yolları kullan.

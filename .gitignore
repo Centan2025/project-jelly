@@ -55,3 +55,7 @@ fix_antigravity_permissions.ps1
 .serena/*
 !.serena/project.yml
 !.serena/memories/
+
+# Local AI session handoff
+.handoff.local.md
+.opencode/
