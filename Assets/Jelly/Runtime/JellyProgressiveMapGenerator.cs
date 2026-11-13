@@ -45,14 +45,20 @@ namespace Jelly
                 LevelNumber = levelNumber,
                 BiomeIndex = (levelNumber - 1) % 5,
                 SpeedMultiplier = 1.0f,
-                // Gentle curve so obstacles and pickups are clearly visible straight ahead
-                CurveIntensity = 0.22f,
+                // Graceful waterpark S-curve matching Alternative 1
+                CurveIntensity = 0.68f,
                 LevelTitle = GetLevelThemeTitle(showcaseIdx, levelNumber)
             };
 
+            // Clean 12m Warm-Up Runway at start so the camera has an unobstructed sightline
+            bp.Chunks.Add(EmptyRunwayChunk());
+
             BuildSequentialTestStages(bp, showcaseIdx);
 
-            // Single short Finale Multiplier chunk at the end so the level finishes quickly (~36m total)
+            // Clean 12m Breathing Runway before Finale Multiplier walls
+            bp.Chunks.Add(EmptyRunwayChunk());
+
+            // Finale Multiplier chunk at the end (~60m total)
             bp.Chunks.Add(new TrackChunkSpec { ModuleType = TrackSegmentModuleType.LevelFinaleMultiplier });
 
             bp.TotalTrackLength = bp.Chunks.Count * 12f;
@@ -87,6 +93,7 @@ namespace Jelly
             {
                 case 1: // 1. Dar Geçit (Gate_Narrow) + Shrink (-)
                     bp.Chunks.Add(GateChunk(EndlessObstacleType.SmallCenterHole));
+                    bp.Chunks.Add(EmptyRunwayChunk());
                     bp.Chunks.Add(GateChunk(EndlessObstacleType.SmallCenterHole));
                     break;
 
@@ -169,6 +176,16 @@ namespace Jelly
                     });
                     break;
             }
+        }
+
+        private static TrackChunkSpec EmptyRunwayChunk()
+        {
+            return new TrackChunkSpec
+            {
+                ModuleType = TrackSegmentModuleType.StandardRoad,
+                HasGateObstacle = false,
+                MultiHoleVariant = -1
+            };
         }
 
         private static TrackChunkSpec GateChunk(

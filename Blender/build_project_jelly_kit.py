@@ -355,6 +355,10 @@ scene.camera = CAM_OVER
 bpy.ops.wm.save_as_mainfile(filepath=BLEND_PATH)
 print("[PJ] BLEND ->", BLEND_PATH)
 
+if os.environ.get("PJ_EXPORT_ONLY", "0") == "1":
+    print("[PJ] PJ_EXPORT_ONLY=1 -> Skipping renders.")
+    sys.exit(0)
+
 # ------------------------------------------------------------------ renders --
 def render_single_group(grp_name, fname, dist=6.0, height=2.2, target_z=0.9, lens=55,
                         cam_dx=0.0, w=960, h=720):

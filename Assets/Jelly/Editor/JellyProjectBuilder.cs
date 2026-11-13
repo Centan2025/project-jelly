@@ -33,6 +33,8 @@ namespace Jelly.Editor
             }
         }
 
+        private const string CurrentArtPreviewMarker = "WaterparkArtV7Marker";
+
         private static void EnsureScenePopulatedInEditor()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode || Application.isPlaying || BuildPipeline.isBuildingPlayer) return;
@@ -40,11 +42,19 @@ namespace Jelly.Editor
             var player = GameObject.Find("JellyPlayer");
             var curvedSlice = GameObject.Find("SmoothRoadChunk_0");
             var parallaxLayer = GameObject.Find("ParallaxFarLayer");
+            var artMarker = GameObject.Find(CurrentArtPreviewMarker);
 
             var endless = UnityEngine.Object.FindAnyObjectByType<EndlessTrackManager>();
-            if (endless != null && (curvedSlice == null || parallaxLayer == null))
+            if (endless != null && (curvedSlice == null || parallaxLayer == null || artMarker == null))
             {
+                AssetDatabase.ImportAsset("Assets/Jelly/Models/ProjectJelly_Kit.fbx", ImportAssetOptions.ForceUpdate);
+                AssetDatabase.ImportAsset("Assets/Jelly/Resources/Models/ProjectJelly_Kit.fbx", ImportAssetOptions.ForceUpdate);
                 endless.BuildInitialPreviewInEditor(endless.primaryPlayer);
+                if (endless.trackRoot != null && GameObject.Find(CurrentArtPreviewMarker) == null)
+                {
+                    var marker = new GameObject(CurrentArtPreviewMarker);
+                    marker.transform.SetParent(endless.trackRoot, false);
+                }
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
                 EditorSceneManager.SaveOpenScenes();
                 FocusSceneViewOnPlayer();
@@ -441,13 +451,18 @@ namespace Jelly.Editor
             var completePanel = CreatePanel(safeRoot.transform, "LevelCompletePanel");
 
             bool isEndless = lvlMgr != null && lvlMgr.GetComponent<EndlessTrackManager>() != null;
-            string title = isEndless
-                ? "SONSUZ JÖLE KOŞUSU — Mesafe: 0m | Skor: 0"
-                : (def != null ? $"{def.levelId.Replace('_', ' ')} — {def.displayName}" : "Level 01 — First Roll");
+            if (isEndless)
+            {
+                hudPanel.SetActive(false);
+                menuPanel.SetActive(false);
+                pausePanel.SetActive(false);
+                completePanel.SetActive(false);
+                return;
+            }
+
+            string title = def != null ? $"{def.levelId.Replace('_', ' ')} — {def.displayName}" : "Level 01 — First Roll";
             var titleText = CreateLabel(hudPanel.transform, "LevelTitleLabel", title, new Vector2(0.5f, 0.94f));
-            string defaultMassText = isEndless
-                ? "Kütle: 90 | Durum: Tek Parça\nYeşil (+): Büyü | Kırmızı (-): Küçül | Mor (÷2): Bölün | Altın (><): Birleş"
-                : $"Kütle: {(def != null ? def.startingMass : 100f):F0} | Parça: 1  [WASD: Hareket | Space: Bölün | E: Birleş | R: Yeniden | N/P: Bölüm Geç]";
+            string defaultMassText = $"Kütle: {(def != null ? def.startingMass : 100f):F0} | Parça: 1  [WASD: Hareket | Space: Bölün | E: Birleş | R: Yeniden | N/P: Bölüm Geç]";
             var massText = CreateLabel(hudPanel.transform, "MassLabel", defaultMassText, new Vector2(0.5f, 0.87f));
             var summaryText = CreateLabel(completePanel.transform, "SummaryLabel", "BÖLÜM TAMAMLANDI! Sonraki bölüme geçiliyor...", new Vector2(0.5f, 0.55f));
 

@@ -18,6 +18,13 @@ namespace Jelly
         private static Mesh _uprightJellyDomeBaseMesh;
         private static readonly Dictionary<string, Material> MaterialCache = new Dictionary<string, Material>();
 
+        public static void ClearCaches()
+        {
+            _cachedKitRoot = null;
+            _uprightJellyDomeBaseMesh = null;
+            MaterialCache.Clear();
+        }
+
         public static GameObject GetKitRoot()
         {
             if (_cachedKitRoot != null)
@@ -226,11 +233,10 @@ namespace Jelly
             float invY = size.y > 0.001f ? 1f / size.y : 1f;
             float invZ = size.z > 0.001f ? 1f / size.z : 1f;
 
-            // Proportion as a wide, chubby horizontal jelly cushion:
-            // Width X = 1.14 (-0.57..+0.57), Height Y = 0.66 (-0.33..+0.33), Depth Z = 0.96 (-0.48..+0.48)
-            const float targetWidthX = 1.14f;
-            const float targetHeightY = 0.66f;
-            const float targetDepthZ = 0.96f;
+            // Proportion as a plump, adorable gumdrop jelly dome (matching Alternative 1!):
+            const float targetWidthX = 1.02f;
+            const float targetHeightY = 0.86f;
+            const float targetDepthZ = 0.98f;
 
             for (int i = 0; i < vertCount; i++)
             {
@@ -526,8 +532,12 @@ namespace Jelly
                 Transform t = all[i];
                 if (t == null) continue;
                 string tn = t.name;
-                // Strip 3D floor text labels AND Blender studio dark-interior plug cylinders so holes/tunnels are 100% open in Unity!
-                if (tn.StartsWith("LBL_") || tn.StartsWith("Narrow_HoleDark") || tn.Contains("_DarkBack_"))
+                // Strip 3D floor text labels, Blender studio dark-interior plug cylinders, AND floating white highlight/spark capsules!
+                if (tn.StartsWith("LBL_") ||
+                    tn.StartsWith("Narrow_HoleDark") ||
+                    tn.Contains("_DarkBack_") ||
+                    tn.EndsWith("_Highlight") ||
+                    tn.Contains("_Spark"))
                 {
                     toDestroy.Add(t.gameObject);
                 }
@@ -541,27 +551,47 @@ namespace Jelly
                     Object.DestroyImmediate(toDestroy[i]);
             }
 
-            // Place 3D "+" and "-" emblems INSIDE the center of the translucent Pickup_Grow and Pickup_Shrink spheres!
+            // Place 3D "+" and "-" emblems INSIDE the exact geometric center of the translucent Pickup_Grow and Pickup_Shrink spheres!
             Transform[] remaining = instance.GetComponentsInChildren<Transform>(true);
+            Renderer sphereBodyRenderer = null;
             for (int i = 0; i < remaining.Length; i++)
             {
                 Transform t = remaining[i];
                 if (t == null) continue;
                 string n = t.name;
-                if (n.StartsWith("Grow_BarH") || n.StartsWith("Grow_BarV") || n.StartsWith("Shrink_BarH") ||
-                    n.StartsWith("Grow_Plus") || n.StartsWith("Shrink_Minus"))
-                {
-                    Vector3 lp = t.localPosition;
-                    t.localPosition = new Vector3(0f, 0f, lp.z);
-                    t.localScale = new Vector3(1.12f, 1.85f, 1.12f);
-                }
-                else if (n.StartsWith("Grow_Body") || n.StartsWith("Shrink_Body"))
+                if (n.StartsWith("Grow_Body") || n.StartsWith("Shrink_Body"))
                 {
                     var bodyRenderer = t.GetComponent<Renderer>();
                     if (bodyRenderer != null)
                     {
                         bodyRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                         bodyRenderer.receiveShadows = false;
+                        sphereBodyRenderer = bodyRenderer;
+                    }
+                }
+            }
+
+            if (sphereBodyRenderer != null)
+            {
+                Vector3 sphereWorldCenter = sphereBodyRenderer.bounds.center;
+                for (int i = 0; i < remaining.Length; i++)
+                {
+                    Transform t = remaining[i];
+                    if (t == null) continue;
+                    string n = t.name;
+                    if (n.StartsWith("Grow_BarH") || n.StartsWith("Grow_BarV") || n.StartsWith("Shrink_BarH") ||
+                        n.StartsWith("Grow_Plus") || n.StartsWith("Shrink_Minus"))
+                    {
+                        t.localScale = new Vector3(0.78f, 0.78f, 0.78f);
+                        var emblemRenderer = t.GetComponent<Renderer>();
+                        if (emblemRenderer != null)
+                        {
+                            t.position += (sphereWorldCenter - emblemRenderer.bounds.center);
+                        }
+                        else
+                        {
+                            t.position = sphereWorldCenter;
+                        }
                     }
                 }
             }
@@ -625,18 +655,25 @@ namespace Jelly
             // so always prioritize explicit semantic color mapping or saturated imported colors!
             Color baseCol = ResolveBlenderMaterialColor(srcMat, matName, objectName);
 
+            string combinedLower = (matName + " " + objectName).ToLowerInvariant();
+            bool isToyGatePart = combinedLower.Contains("sunnygold") ||
+                                 combinedLower.Contains("topheadergold") ||
+                                 combinedLower.Contains("holecollar") ||
+                                 combinedLower.Contains("wallcoral") ||
+                                 combinedLower.Contains("pillarcoral") ||
+                                 combinedLower.Contains("narrow_");
+
             m.color = baseCol;
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", baseCol);
-            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.86f);
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", isToyGatePart ? 0.34f : 0.82f);
             if (m.HasProperty("_Metallic"))
             {
-                bool isMetal = matName.IndexOf("Gold", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                               matName.IndexOf("Silver", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                               matName.IndexOf("Metal", System.StringComparison.OrdinalIgnoreCase) >= 0;
-                m.SetFloat("_Metallic", isMetal ? 0.45f : 0.08f);
+                bool isMetal = !isToyGatePart &&
+                               (matName.IndexOf("Gold", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                matName.IndexOf("Silver", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                matName.IndexOf("Metal", System.StringComparison.OrdinalIgnoreCase) >= 0);
+                m.SetFloat("_Metallic", isMetal ? 0.40f : 0.0f);
             }
-
-            string combinedLower = (matName + " " + objectName).ToLowerInvariant();
             bool isTranslucentPickupSphere = combinedLower.Contains("grow_body") ||
                                              combinedLower.Contains("grow_glass") ||
                                              combinedLower.Contains("shrink_body") ||
@@ -645,10 +682,24 @@ namespace Jelly
 
             if (isTranslucentPickupSphere)
             {
-                baseCol.a = 0.42f;
-                ConfigureTransparentURPMaterial(m, baseCol, null);
-                if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.96f);
-                if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.96f);
+                Shader glassSh = Resources.Load<Shader>("Shaders/GlassPickupOrb") ?? Shader.Find("ProjectJelly/GlassPickupOrb");
+                if (glassSh != null)
+                {
+                    m.shader = glassSh;
+                    Color shellTint = new Color(baseCol.r, baseCol.g, baseCol.b, 0.78f);
+                    Color rimTint = Color.Lerp(baseCol, Color.white, 0.45f);
+                    rimTint.a = 0.98f;
+                    m.SetColor("_BaseColor", shellTint);
+                    m.SetColor("_RimColor", rimTint);
+                    m.SetFloat("_RimPower", 2.1f);
+                    m.SetFloat("_SpecPower", 160f);
+                }
+                else
+                {
+                    baseCol.a = 0.34f;
+                    ConfigureTransparentURPMaterial(m, baseCol, null);
+                    if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.96f);
+                }
             }
 
             bool isPureWhiteEmblem = combinedLower.Contains("barh") ||
@@ -681,10 +732,15 @@ namespace Jelly
                               combinedLower.Contains("shrink") ||
                               combinedLower.Contains("star");
 
+            if (isPureWhiteEmblem)
+            {
+                m.renderQueue = 3005; // Render after outer GlassPickupOrb (3000) while respecting ZTest so '+'/'-' stay pure white!
+            }
+
             if (m.HasProperty("_EmissionColor"))
             {
                 m.EnableKeyword("_EMISSION");
-                float emMult = isPureWhiteEmblem ? 1.85f : (isTranslucentPickupSphere ? 0.32f : (isEmissive ? 0.55f : 0.20f));
+                float emMult = isPureWhiteEmblem ? 1.15f : (isToyGatePart ? 0.28f : (isTranslucentPickupSphere ? 0.08f : (isEmissive ? 0.25f : 0.04f)));
                 m.SetColor("_EmissionColor", new Color(baseCol.r, baseCol.g, baseCol.b, 1f) * emMult);
             }
 
@@ -712,27 +768,23 @@ namespace Jelly
             if (s.Contains("shrink_spark") || s.Contains("shrink_particle"))
                 return new Color(1.00f, 0.42f, 0.58f);
 
-            // 3. Explicit Gate_Narrow & Gate_MultiHole palette (prevents "narrow" matching "arrow"!)
-            if (s.Contains("rivet"))
-                return new Color(1.00f, 0.78f, 0.12f); // Gold rivets
-            if (s.Contains("pedestalrim"))
-                return new Color(0.26f, 0.68f, 1.00f); // Cyan-Blue glowing pedestal rim
-            if (s.Contains("pedestal"))
-                return new Color(0.28f, 0.20f, 0.58f); // Deep Purple-Blue pedestal base
-            if (s.Contains("holecollar") || s.Contains("narrowcollar") || s.Contains("panelseam") ||
-                s.Contains("darktrim") || s.Contains("buttressfoot"))
-                return new Color(0.24f, 0.16f, 0.56f); // Deep Violet-Indigo collar & trim
-            if (s.Contains("buttressrib") || s.Contains("buttressneon") || s.Contains("trimmag"))
-                return new Color(0.92f, 0.26f, 0.98f); // Glowing Neon Magenta buttress ribs & arch trim
-            if (s.Contains("narrow_wall") || s.Contains("narrowwallindigo") || s.Contains("wallindigo") ||
-                s.Contains("narrow_buttress") || s.Contains("buttressindigo"))
-                return new Color(0.36f, 0.26f, 0.76f); // Rich Indigo-Purple main gate wall
+            // 3. Explicit Gate_Narrow & Gate_MultiHole palette (Alternative 1: Toy-Box Coral-Pink & Sunny Gold!)
+            if (s.Contains("rivet") || s.Contains("sunnygold") || s.Contains("topheadergold") ||
+                s.Contains("holecollar") || s.Contains("narrowcollar") || s.Contains("pedestalrim") ||
+                s.Contains("buttressrib") || s.Contains("buttressneon") || s.Contains("trimmag"))
+                return new Color(1.00f, 0.80f, 0.14f); // Rich Sunny Yellow-Gold header & tunnel ring
+            if (s.Contains("pedestal") || s.Contains("panelseam") || s.Contains("darktrim") || s.Contains("buttressfoot"))
+                return new Color(0.86f, 0.30f, 0.38f); // Deep coral trim
+            if (s.Contains("narrow_buttress") || s.Contains("buttressindigo") || s.Contains("pillarcoral"))
+                return new Color(0.95f, 0.38f, 0.44f); // Playful coral-pink side pillars
+            if (s.Contains("narrow_wall") || s.Contains("narrowwall") || s.Contains("wallcoral") || s.Contains("wallindigo"))
+                return new Color(0.98f, 0.44f, 0.50f); // Toy coral-pink main gate wall
 
-            // 4. Explicit Pickup & Obstacle colors (prevents Blender procedural node materials from importing as white/grey!)
+            // 4. Explicit Pickup & Obstacle colors (rich jewel saturation so glass orbs pop on light ceramic tiles!)
             if (s.Contains("grow") || s.Contains("green") || s.Contains("jump"))
-                return new Color(0.10f, 0.92f, 0.38f); // Vibrant Emerald Green (+)
+                return new Color(0.06f, 0.78f, 0.34f); // Deep Emerald Green (+)
             if (s.Contains("shrink") || s.Contains("red") || s.Contains("magnet"))
-                return new Color(1.00f, 0.16f, 0.26f); // Vibrant Ruby Red (-) / Magnet
+                return new Color(0.90f, 0.14f, 0.22f); // Deep Ruby Red (-) / Magnet
             if (s.Contains("merge") || s.Contains("chevron") || s.Contains("star") ||
                 s.Contains("gold") || s.Contains("yellow") || s.Contains("sand") ||
                 s.Contains("sticky") || s.Contains("honey") ||
@@ -842,11 +894,11 @@ namespace Jelly
                 {
                     float nx = (x / (float)(size - 1)) * 2f - 1f;
                     float r = Mathf.Sqrt(nx * nx + ny * ny);
-                    float ring = Mathf.Exp(-Mathf.Pow((r - 0.68f) / 0.16f, 2f)) * 0.65f;
-                    float core = Mathf.Clamp01(1f - r * 1.15f) * 0.35f;
-                    float a = Mathf.Clamp01(ring + core) * Mathf.Clamp01((1f - r) * 4f);
+                    // Smooth ambient-occlusion contact shadow blob (no concentric double rings)
+                    float falloff = Mathf.Clamp01(1f - r);
+                    float a = Mathf.Pow(falloff, 2.2f) * 0.58f;
                     byte alpha = (byte)Mathf.RoundToInt(a * 255f);
-                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+                    pixels[y * size + x] = new Color32(18, 12, 42, alpha);
                 }
             }
 
@@ -901,12 +953,35 @@ namespace Jelly
         internal static Material GetOrCreateGlossyJellyMaterial(Color tint)
         {
             Color32 c32 = tint;
-            string key = $"GlossyJellyMat_{c32.r}_{c32.g}_{c32.b}";
+            string key = $"JellySubsurfaceMat_{c32.r}_{c32.g}_{c32.b}";
             if (MaterialCache.TryGetValue(key, out Material cached) && cached != null)
                 return cached;
 
+            Shader jellySh = Resources.Load<Shader>("Shaders/JellySubsurface") ?? Shader.Find("ProjectJelly/JellySubsurface");
+            if (jellySh != null)
+            {
+                var mat = new Material(jellySh) { name = key };
+                Color baseCol = new Color(tint.r, tint.g, tint.b, 0.84f);
+                Color coreCol = Color.Lerp(tint, Color.white, 0.42f);
+                coreCol.a = 1f;
+                Color rimCol = Color.Lerp(tint, Color.white, 0.78f);
+                rimCol.a = 1f;
+
+                mat.SetColor("_BaseColor", baseCol);
+                mat.SetColor("_CoreColor", coreCol);
+                mat.SetColor("_RimColor", rimCol);
+                mat.SetFloat("_RimPower", 2.6f);
+                mat.SetFloat("_RimIntensity", 0.90f);
+                mat.SetFloat("_Subsurface", 0.72f);
+                mat.SetFloat("_SpecPower", 132f);
+                mat.SetFloat("_SpecIntensity", 1.75f);
+
+                MaterialCache[key] = mat;
+                return mat;
+            }
+
             Shader sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            var mat = new Material(sh) { name = key };
+            var fallbackMat = new Material(sh) { name = key };
             Texture2D glossTex = GetOrCreateJellyGlossGradientTexture();
 
             Color brightTint = new Color(
@@ -915,21 +990,21 @@ namespace Jelly
                 Mathf.Clamp01(tint.b * 1.05f + 0.08f),
                 0.96f);
 
-            mat.color = brightTint;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", brightTint);
-            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", glossTex);
-            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", glossTex);
-            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.96f);
-            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.96f);
-            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.08f);
-            if (mat.HasProperty("_EmissionColor"))
+            fallbackMat.color = brightTint;
+            if (fallbackMat.HasProperty("_BaseColor")) fallbackMat.SetColor("_BaseColor", brightTint);
+            if (fallbackMat.HasProperty("_BaseMap")) fallbackMat.SetTexture("_BaseMap", glossTex);
+            if (fallbackMat.HasProperty("_MainTex")) fallbackMat.SetTexture("_MainTex", glossTex);
+            if (fallbackMat.HasProperty("_Smoothness")) fallbackMat.SetFloat("_Smoothness", 0.96f);
+            if (fallbackMat.HasProperty("_Glossiness")) fallbackMat.SetFloat("_Glossiness", 0.96f);
+            if (fallbackMat.HasProperty("_Metallic")) fallbackMat.SetFloat("_Metallic", 0.08f);
+            if (fallbackMat.HasProperty("_EmissionColor"))
             {
-                mat.EnableKeyword("_EMISSION");
-                mat.SetColor("_EmissionColor", new Color(tint.r * 0.38f, tint.g * 0.46f, tint.b * 0.52f, 1f));
+                fallbackMat.EnableKeyword("_EMISSION");
+                fallbackMat.SetColor("_EmissionColor", new Color(tint.r * 0.38f, tint.g * 0.46f, tint.b * 0.52f, 1f));
             }
 
-            MaterialCache[key] = mat;
-            return mat;
+            MaterialCache[key] = fallbackMat;
+            return fallbackMat;
         }
     }
 }

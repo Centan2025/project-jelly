@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Jelly
 {
@@ -104,6 +106,13 @@ namespace Jelly
         private float _wobbleAmplitude;
         private float _wobblePhase;
         private float _trailSpawnTimer;
+        private float _cameraFovPunch;
+        private float _cameraShakeTimer;
+        private float _cameraShakeAmp;
+        private float _lastTapTime = -1f;
+        private Vector2 _pointerDownPos;
+        private Material _skyboxMat;
+        private Volume _globalPostVolume;
         private static float _activeCurveScale = 1.0f;
 
         private Texture2D _flatTex;
@@ -125,15 +134,15 @@ namespace Jelly
 
         private static readonly BiomePalette[] Biomes = new BiomePalette[]
         {
-            new BiomePalette // 0: Jöle Diyarı (Ana Tema)
+            new BiomePalette // 0: Oyuncak Su Parkı (Alternatif 1 Ana Tema)
             {
-                Name = "JÖLE DİYARI",
-                SkyColor = new Color(0.36f, 0.56f, 0.94f),
-                RoadSurfaceColor = new Color(0.32f, 0.28f, 0.68f),
-                CurbColor = new Color(0.22f, 0.88f, 1.00f),
-                StripeColor = new Color(0.82f, 0.42f, 1.00f),
-                PropColor = new Color(0.96f, 0.44f, 0.82f),
-                CloudColor = new Color(0.95f, 0.92f, 1.00f)
+                Name = "SU PARKI",
+                SkyColor = new Color(0.24f, 0.76f, 1.00f),
+                RoadSurfaceColor = Color.white,
+                CurbColor = new Color(0.26f, 0.84f, 0.94f),
+                StripeColor = new Color(0.04f, 0.74f, 0.72f),
+                PropColor = new Color(0.98f, 0.42f, 0.28f),
+                CloudColor = Color.white
             },
             new BiomePalette // 1: Şeker Ülkesi (Candy)
             {
@@ -227,6 +236,12 @@ namespace Jelly
             CurrentLevelNumber = 1;
         }
 
+        public float CurrentLevelTotalLength => _currentBlueprint != null ? _currentBlueprint.Chunks.Count * sliceLength : 72f;
+        public string CurrentLevelDisplayTitle => _currentBlueprint != null ? _currentBlueprint.LevelTitle : $"LVL {CurrentLevelNumber}";
+
+        private JellyModernUI _modernUI;
+        private JellyAudioAndHaptics _audio;
+
         private void Start()
         {
             if (lateralSteerSpeed > 4.5f) lateralSteerSpeed = 4.2f;
@@ -234,6 +249,36 @@ namespace Jelly
             if (mainCamera == null) mainCamera = Camera.main;
             CurrentLevelNumber = 1;
             StartLevel(1);
+
+            DestroyLegacySceneCanvases();
+
+            _audio = GetComponent<JellyAudioAndHaptics>();
+            if (_audio == null) _audio = gameObject.AddComponent<JellyAudioAndHaptics>();
+
+            EnsureModernUI();
+        }
+
+        private void DestroyLegacySceneCanvases()
+        {
+            var legacyUi = FindAnyObjectByType<JellyUIManager>();
+            if (legacyUi != null && legacyUi.gameObject != gameObject)
+            {
+                if (Application.isPlaying) Destroy(legacyUi.gameObject);
+                else DestroyImmediate(legacyUi.gameObject);
+            }
+            var oldCanvas = GameObject.Find("JellyUICanvas");
+            if (oldCanvas != null && oldCanvas != gameObject)
+            {
+                if (Application.isPlaying) Destroy(oldCanvas);
+                else DestroyImmediate(oldCanvas);
+            }
+        }
+
+        public void EnsureModernUI()
+        {
+            _modernUI = GetComponent<JellyModernUI>();
+            if (_modernUI == null) _modernUI = gameObject.AddComponent<JellyModernUI>();
+            _modernUI.Bind(this);
         }
 
         public void StartNewEndlessRun()
@@ -303,7 +348,14 @@ namespace Jelly
         {
             if (existingPlayer != null) primaryPlayer = existingPlayer;
             if (mainCamera == null) mainCamera = Camera.main;
+            BlenderKitModelSpawner.ClearCaches();
+            _cachedRoadGridTex = null;
+            _cachedRoadGridMats.Clear();
+            _cachedWaterCausticsTex = null;
+            DestroyLegacySceneCanvases();
+            CurrentScreen = JellyScreenMode.Playing;
             StartLevel(1);
+            EnsureModernUI();
         }
 
         public void RenderComparisonSnapshotsToDisk(string outputDir)
@@ -447,14 +499,108 @@ namespace Jelly
         {
             if (mainCamera == null) return;
             BiomePalette b = GetCurrentBiome();
-            mainCamera.clearFlags = CameraClearFlags.SolidColor;
-            mainCamera.backgroundColor = b.SkyColor;
+
+            // 1. Gradient Skybox instead of flat SolidColor
+            Shader skySh = Resources.Load<Shader>("Shaders/ProceduralSkyGradient") ?? Shader.Find("ProjectJelly/ProceduralSkyGradient");
+            if (skySh != null)
+            {
+                if (_skyboxMat == null || _skyboxMat.shader != skySh)
+                    _skyboxMat = new Material(skySh) { name = "RuntimeJellyGradientSky" };
+
+                Color zenith = Color.Lerp(b.SkyColor, new Color(0.14f, 0.34f, 0.86f), 0.35f);
+                Color horizon = Color.Lerp(b.SkyColor, Color.white, 0.42f);
+                Color ground = Color.Lerp(b.RoadSurfaceColor, b.SkyColor, 0.45f);
+                _skyboxMat.SetColor("_TopColor", zenith);
+                _skyboxMat.SetColor("_HorizonColor", horizon);
+                _skyboxMat.SetColor("_BottomColor", ground);
+                _skyboxMat.SetFloat("_HorizonSharpness", 1.15f);
+                RenderSettings.skybox = _skyboxMat;
+                mainCamera.clearFlags = CameraClearFlags.Skybox;
+            }
+            else
+            {
+                mainCamera.clearFlags = CameraClearFlags.SolidColor;
+                mainCamera.backgroundColor = b.SkyColor;
+            }
+
             mainCamera.fieldOfView = 54f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogStartDistance = 62f;
-            RenderSettings.fogEndDistance = 145f;
-            RenderSettings.fogColor = b.SkyColor;
+            RenderSettings.fogStartDistance = 68f;
+            RenderSettings.fogEndDistance = 155f;
+            RenderSettings.fogColor = Color.Lerp(b.SkyColor, Color.white, 0.34f);
+
+            // Studio Trilight ambient lighting & balanced key directional light (prevents white blow-out)
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = Color.Lerp(b.SkyColor, Color.white, 0.25f);
+            RenderSettings.ambientEquatorColor = Color.Lerp(b.SkyColor, b.CurbColor, 0.22f);
+            RenderSettings.ambientGroundColor = new Color(0.18f, 0.56f, 0.68f);
+
+            Light keyLight = RenderSettings.sun;
+            if (keyLight == null)
+            {
+                var lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+                for (int i = 0; i < lights.Length; i++)
+                {
+                    if (lights[i].type == LightType.Directional) { keyLight = lights[i]; break; }
+                }
+            }
+            if (keyLight != null)
+            {
+                keyLight.intensity = 1.08f;
+                keyLight.color = new Color(1.00f, 0.97f, 0.93f);
+                keyLight.shadows = LightShadows.Soft;
+                keyLight.shadowStrength = 0.52f;
+                keyLight.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            }
+
+            EnsureWaterparkOceanPlane(b);
+
+            // 2. Enable URP Post-Processing (Bloom + ACES Tonemapping + Vignette)
+            var camData = mainCamera.GetComponent<UniversalAdditionalCameraData>();
+            if (camData != null)
+            {
+                camData.renderPostProcessing = true;
+            }
+            EnsureGlobalPostProcessingVolume();
+        }
+
+        private void EnsureGlobalPostProcessingVolume()
+        {
+            if (_globalPostVolume != null) return;
+            var existing = FindAnyObjectByType<Volume>();
+            if (existing != null && existing.isGlobal)
+            {
+                _globalPostVolume = existing;
+                return;
+            }
+
+            var volGo = new GameObject("JellyPostProcessingVolume");
+            volGo.transform.SetParent(trackRoot != null ? trackRoot : transform, false);
+            _globalPostVolume = volGo.AddComponent<Volume>();
+            _globalPostVolume.isGlobal = true;
+            _globalPostVolume.priority = 10f;
+
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            var tonemapping = profile.Add<Tonemapping>(true);
+            tonemapping.mode.overrideState = true;
+            tonemapping.mode.value = TonemappingMode.ACES;
+
+            var bloom = profile.Add<Bloom>(true);
+            bloom.threshold.overrideState = true;
+            bloom.threshold.value = 1.15f;
+            bloom.intensity.overrideState = true;
+            bloom.intensity.value = 0.16f;
+            bloom.scatter.overrideState = true;
+            bloom.scatter.value = 0.48f;
+
+            var vignette = profile.Add<Vignette>(true);
+            vignette.intensity.overrideState = true;
+            vignette.intensity.value = 0.16f;
+            vignette.smoothness.overrideState = true;
+            vignette.smoothness.value = 0.35f;
+
+            _globalPostVolume.sharedProfile = profile;
         }
 
         private void EnsurePlayerObjects()
@@ -573,17 +719,61 @@ namespace Jelly
         private static void EnsureJellyGlossDecorations(Transform jellyRoot)
         {
             if (jellyRoot == null) return;
-            var oldSpec = jellyRoot.Find("GlossHighlight");
-            if (oldSpec != null)
+            for (int i = jellyRoot.childCount - 1; i >= 0; i--)
             {
-                if (Application.isPlaying) Destroy(oldSpec.gameObject);
-                else DestroyImmediate(oldSpec.gameObject);
+                var ch = jellyRoot.GetChild(i);
+                string n = ch.name;
+                if (n == "GlossHighlight" || n == "JellyInnerCore" || n == "CuteFaceRig" ||
+                    n.StartsWith("WetTrail", System.StringComparison.Ordinal))
+                {
+                    if (Application.isPlaying) Destroy(ch.gameObject);
+                    else DestroyImmediate(ch.gameObject);
+                }
             }
-            var oldCore = jellyRoot.Find("JellyInnerCore");
-            if (oldCore != null)
+
+            // Cute expressive eyes & curved smile placed high on the upper dome arc so they never sink below the jelly contour
+            var faceRig = new GameObject("CuteFaceRig").transform;
+            faceRig.SetParent(jellyRoot, false);
+            faceRig.localPosition = Vector3.zero;
+            faceRig.localRotation = Quaternion.identity;
+
+            Color eyeDark = new Color(0.05f, 0.07f, 0.11f, 1f);
+            for (int s = -1; s <= 1; s += 2)
             {
-                if (Application.isPlaying) Destroy(oldCore.gameObject);
-                else DestroyImmediate(oldCore.gameObject);
+                var eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                eye.name = s < 0 ? "EyeL" : "EyeR";
+                DestroyCollider(eye);
+                eye.transform.SetParent(faceRig, false);
+                eye.transform.localPosition = new Vector3(s * 0.145f, 0.205f, -0.425f);
+                eye.transform.localRotation = Quaternion.Euler(-28f, 0f, 0f);
+                eye.transform.localScale = new Vector3(0.115f, 0.125f, 0.075f);
+                LevelLoader.ApplyMaterialOrColor(eye, null, eyeDark);
+
+                var glint = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                glint.name = "EyeGlint";
+                DestroyCollider(glint);
+                glint.transform.SetParent(eye.transform, false);
+                glint.transform.localPosition = new Vector3(-0.22f, 0.24f, -0.48f);
+                glint.transform.localScale = new Vector3(0.38f, 0.38f, 0.38f);
+                LevelLoader.ApplyMaterialOrColor(glint, null, Color.white);
+            }
+
+            // Cute 3-dot curved smile arc ('◡')
+            Vector3[] smilePts =
+            {
+                new Vector3(-0.048f, 0.135f, -0.452f),
+                new Vector3( 0.000f, 0.118f, -0.458f),
+                new Vector3( 0.048f, 0.135f, -0.452f)
+            };
+            for (int m = 0; m < smilePts.Length; m++)
+            {
+                var dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                dot.name = $"SmileArc_{m}";
+                DestroyCollider(dot);
+                dot.transform.SetParent(faceRig, false);
+                dot.transform.localPosition = smilePts[m];
+                dot.transform.localScale = new Vector3(0.036f, 0.032f, 0.032f);
+                LevelLoader.ApplyMaterialOrColor(dot, null, eyeDark);
             }
         }
 
@@ -633,19 +823,21 @@ namespace Jelly
             _jellyBridgeVisual = null;
             _primaryShadowDisc = null;
             _secondaryShadowDisc = null;
+            _waterOceanPlane = null;
+            _waterOceanMat = null;
         }
 
         public static void EvaluateRoadCurve(float z, out Vector3 pos, out Quaternion rot, out Vector3 right)
         {
-            float blend = Mathf.Clamp01((z - 6f) / 14f) * _activeCurveScale;
-            float x = blend * (Mathf.Sin(z * 0.045f) * 5.8f + Mathf.Sin(z * 0.095f) * 2.0f);
-            float y = blend * (Mathf.Sin(z * 0.052f) * 1.7f + Mathf.Cos(z * 0.105f) * 0.65f - 0.65f);
+            float blend = Mathf.Clamp01((z - 3f) / 11f) * _activeCurveScale;
+            float x = blend * (-Mathf.Sin((z - 3f) * 0.082f) * 4.4f + Mathf.Sin(z * 0.038f) * 1.4f);
+            float y = blend * (Mathf.Sin(z * 0.055f) * 0.14f);
 
             float dz = 0.25f;
             float z2 = z + dz;
-            float blend2 = Mathf.Clamp01((z2 - 6f) / 14f) * _activeCurveScale;
-            float x2 = blend2 * (Mathf.Sin(z2 * 0.045f) * 5.8f + Mathf.Sin(z2 * 0.095f) * 2.0f);
-            float y2 = blend2 * (Mathf.Sin(z2 * 0.052f) * 1.7f + Mathf.Cos(z2 * 0.105f) * 0.65f - 0.65f);
+            float blend2 = Mathf.Clamp01((z2 - 3f) / 11f) * _activeCurveScale;
+            float x2 = blend2 * (-Mathf.Sin((z2 - 3f) * 0.082f) * 4.4f + Mathf.Sin(z2 * 0.038f) * 1.4f);
+            float y2 = blend2 * (Mathf.Sin(z2 * 0.055f) * 0.14f);
 
             Vector3 tangent = new Vector3(x2 - x, y2 - y, dz).normalized;
             float bankAngle = Mathf.Clamp(-(x2 - x) / dz * 6.5f, -9f, 9f);
@@ -667,6 +859,7 @@ namespace Jelly
             IsSplit = targetSplit;
             _wobbleAmplitude = 0.26f;
             _wobblePhase = 0f;
+            _audio?.PlaySplitMerge(SoundEnabled, VibrationEnabled);
             if (IsSplit)
             {
                 QuestSplitsCount++;
@@ -696,9 +889,20 @@ namespace Jelly
 
             UpdateParallaxLayers(Time.deltaTime);
 
-            // Pause forward movement when viewing MainMenu, Paused, Quests, Shop, or Settings screens
+            // Pause forward movement when viewing MainMenu, Settings, or Paused; Swipe immediately starts from MainMenu!
             if (CurrentScreen != JellyScreenMode.Playing)
             {
+                if (CurrentScreen == JellyScreenMode.MainMenu)
+                {
+                    var tsMenu = Touchscreen.current;
+                    bool swipeStart = (tsMenu != null && tsMenu.primaryTouch.press.isPressed && tsMenu.primaryTouch.delta.ReadValue().sqrMagnitude > 16f) ||
+                                      (Mouse.current != null && Mouse.current.leftButton.isPressed && Mouse.current.delta.ReadValue().sqrMagnitude > 16f);
+                    if (swipeStart)
+                    {
+                        CurrentScreen = JellyScreenMode.Playing;
+                        return;
+                    }
+                }
                 SyncJellyVisualsAndPosition(0f);
                 return;
             }
@@ -752,26 +956,53 @@ namespace Jelly
 
             float dragDeltaOffset = 0f;
             float screenWidth = Mathf.Max(400f, Screen.width);
-            float bottomControlBarY = Screen.height * 0.20f;
-            float topHudBarY = Screen.height * 0.84f;
+            float topSafePauseZone = Screen.height * 0.90f; // Only exclude top-most HUD bar
             var ts = Touchscreen.current;
             if (ts != null && ts.primaryTouch.press.isPressed)
             {
                 Vector2 p = ts.primaryTouch.position.ReadValue();
-                if (p.y > bottomControlBarY && p.y < topHudBarY)
+                if (ts.primaryTouch.press.wasPressedThisFrame && p.y < topSafePauseZone)
+                {
+                    float now = Time.unscaledTime;
+                    if (now - _lastTapTime < 0.28f && Vector2.Distance(p, _pointerDownPos) < screenWidth * 0.08f)
+                    {
+                        ToggleManualSplitMerge();
+                        _lastTapTime = -1f;
+                    }
+                    else
+                    {
+                        _lastTapTime = now;
+                        _pointerDownPos = p;
+                    }
+                }
+                if (p.y < topSafePauseZone)
                 {
                     if (!_dragging) { _dragging = true; _dragPrevPos = p; }
-                    dragDeltaOffset = ((p.x - _dragPrevPos.x) / screenWidth) * roadWidth * 0.90f;
+                    dragDeltaOffset = ((p.x - _dragPrevPos.x) / screenWidth) * roadWidth * 1.18f;
                     _dragPrevPos = p;
                 }
             }
             else if (Mouse.current != null && Mouse.current.leftButton.isPressed)
             {
                 Vector2 p = Mouse.current.position.ReadValue();
-                if (p.y > bottomControlBarY && p.y < topHudBarY)
+                if (Mouse.current.leftButton.wasPressedThisFrame && p.y < topSafePauseZone)
+                {
+                    float now = Time.unscaledTime;
+                    if (now - _lastTapTime < 0.28f && Vector2.Distance(p, _pointerDownPos) < screenWidth * 0.08f)
+                    {
+                        ToggleManualSplitMerge();
+                        _lastTapTime = -1f;
+                    }
+                    else
+                    {
+                        _lastTapTime = now;
+                        _pointerDownPos = p;
+                    }
+                }
+                if (p.y < topSafePauseZone)
                 {
                     if (!_dragging) { _dragging = true; _dragPrevPos = p; }
-                    dragDeltaOffset = ((p.x - _dragPrevPos.x) / screenWidth) * roadWidth * 0.90f;
+                    dragDeltaOffset = ((p.x - _dragPrevPos.x) / screenWidth) * roadWidth * 1.18f;
                     _dragPrevPos = p;
                 }
             }
@@ -780,8 +1011,10 @@ namespace Jelly
                 _dragging = false;
             }
 
+            // Mass-responsive steering agility: lighter jelly is snappier, giant jelly feels heavier
+            float massAgility = Mathf.Lerp(1.22f, 0.80f, Mathf.InverseLerp(45f, 160f, CurrentMass));
             float maxOffset = IsSplit ? maxLateralOffset - 0.80f : maxLateralOffset;
-            float nextOffset = CurrentLateralOffset + (_smoothedSteerInput * lateralSteerSpeed * dt) + dragDeltaOffset + conveyorDelta;
+            float nextOffset = CurrentLateralOffset + (_smoothedSteerInput * lateralSteerSpeed * massAgility * dt) + (dragDeltaOffset * massAgility) + conveyorDelta;
 
             // Gentle magnetic funnel assist when approaching TwinSplitTunnels or MovingTwinTunnels while split
             if (IsSplit)
@@ -1092,6 +1325,7 @@ namespace Jelly
         private void CompleteCurrentLevel()
         {
             IsLevelCompleted = true;
+            _audio?.PlayLevelWin(SoundEnabled, VibrationEnabled);
             if (CurrentLevelNumber >= HighestUnlockedLevel)
             {
                 HighestUnlockedLevel = CurrentLevelNumber + 1;
@@ -1147,9 +1381,9 @@ namespace Jelly
             float idlePulse = Mathf.Sin(liveTime * 5.2f) * 0.032f;
             float moveWave = forwardDelta > 0.001f ? Mathf.Sin(CurrentDistance * 2.4f) * 0.038f : 0f;
             float wobble = Mathf.Sin(_wobblePhase) * _wobbleAmplitude + idlePulse + moveWave;
-            float scaleX = diameter * (1.08f + stretchPhase * 0.36f + wobble);
-            float scaleY = diameter * Mathf.Max(0.55f, 0.86f - stretchPhase * 0.22f - wobble * 0.7f);
-            float scaleZ = diameter * (0.88f - stretchPhase * 0.12f - wobble * 0.25f);
+            float scaleX = diameter * (0.98f + stretchPhase * 0.32f + wobble);
+            float scaleY = diameter * Mathf.Max(0.68f, 1.02f - stretchPhase * 0.18f - wobble * 0.55f);
+            float scaleZ = diameter * (0.98f - stretchPhase * 0.10f - wobble * 0.20f);
             Vector3 jellyScale = new Vector3(scaleX, scaleY, scaleZ);
             Quaternion bankRot = roadRot * Quaternion.Euler(0f, 0f, -_smoothedSteerInput * 11f);
 
@@ -1161,10 +1395,10 @@ namespace Jelly
             }
             else if (SelectedSkinIndex == 0)
             {
-                // Reference Section 1: Küçük/Normal = Glowing Cyan/Blue, Dev Jöle (≥115) = Vibrant Emerald Green!
+                // Reference Section 1: Toy Waterpark saturated aqua-turquoise jelly (never pale white!)
                 stateTint = CurrentMass >= 115f
-                    ? new Color(0.14f, 0.96f, 0.50f, 0.95f)
-                    : (CurrentMass <= 75f ? new Color(0.24f, 0.88f, 1.00f, 0.95f) : new Color(0.12f, 0.76f, 1.00f, 0.95f));
+                    ? new Color(0.10f, 0.88f, 0.48f, 0.96f)
+                    : (CurrentMass <= 75f ? new Color(0.08f, 0.82f, 0.92f, 0.96f) : new Color(0.04f, 0.78f, 0.90f, 0.96f));
             }
             else
             {
@@ -1180,10 +1414,11 @@ namespace Jelly
                 LevelLoader.ApplyMaterialOrColor(_secondarySplitVisual, jellyMaterial, stateTint);
                 BlenderKitModelSpawner.ApplyJellySkinMaterial(_secondarySplitVisual, stateTint);
             }
+            Color contactShadowCol = new Color(0.05f, 0.26f, 0.32f, 0.58f);
             if (_primaryShadowDisc != null)
-                BlenderKitModelSpawner.ApplySoftShadowDiscMaterial(_primaryShadowDisc, new Color(stateTint.r, stateTint.g, stateTint.b, 0.52f));
+                BlenderKitModelSpawner.ApplySoftShadowDiscMaterial(_primaryShadowDisc, contactShadowCol);
             if (_secondaryShadowDisc != null)
-                BlenderKitModelSpawner.ApplySoftShadowDiscMaterial(_secondaryShadowDisc, new Color(stateTint.r, stateTint.g, stateTint.b, 0.52f));
+                BlenderKitModelSpawner.ApplySoftShadowDiscMaterial(_secondaryShadowDisc, contactShadowCol);
             if (_shieldBubbleVisual != null && _shieldBubbleVisual.activeSelf != HasShield)
                 _shieldBubbleVisual.SetActive(HasShield);
 
@@ -1193,7 +1428,7 @@ namespace Jelly
             if (_currentSplitBlend <= 0.005f && !IsSplit)
             {
                 Vector3 deckGroundPos = roadCenter + roadRight * CurrentLateralOffset + roadUp * _deckBaseY;
-                Vector3 worldPos = deckGroundPos + roadUp * (_airborneY + scaleY * 0.33f + 0.015f);
+                Vector3 worldPos = deckGroundPos + roadUp * (_airborneY + scaleY * 0.42f + 0.015f);
                 primaryPlayer.transform.position = worldPos;
                 primaryPlayer.transform.localScale = jellyScale;
                 primaryPlayer.transform.rotation = bankRot;
@@ -1221,7 +1456,7 @@ namespace Jelly
                 float currentSpread = maxSpread * smoothT;
 
                 Vector3 centerGround = roadCenter + roadRight * CurrentLateralOffset + roadUp * _deckBaseY;
-                Vector3 centerWorld = centerGround + roadUp * (_airborneY + scaleY * 0.33f + 0.015f);
+                Vector3 centerWorld = centerGround + roadUp * (_airborneY + scaleY * 0.42f + 0.015f);
                 Vector3 leftPos = centerWorld - roadRight * currentSpread;
                 Vector3 rightPos = centerWorld + roadRight * currentSpread;
 
@@ -1290,6 +1525,8 @@ namespace Jelly
         {
             if (pickupWorldPos == default && primaryPlayer != null)
                 pickupWorldPos = primaryPlayer.transform.position;
+
+            _audio?.PlayPickup(SoundEnabled, VibrationEnabled, ComboCount, type == EndlessPickupType.Shrink);
 
             switch (type)
             {
@@ -1396,6 +1633,23 @@ namespace Jelly
             {
                 HighScore = Score;
                 PlayerPrefs.SetInt("JellyEndlessHighScore", HighScore);
+            }
+        }
+
+        private static void SpawnCrystalShatterBurst(Vector3 centerPos)
+        {
+            if (!Application.isPlaying) return;
+            for (int i = 0; i < 14; i++)
+            {
+                var shard = CreateWallBlock(null, "CrystalShard", centerPos + Random.insideUnitSphere * 0.9f,
+                    new Vector3(Random.Range(0.18f, 0.42f), Random.Range(0.22f, 0.55f), Random.Range(0.14f, 0.32f)),
+                    null, new Color(0.32f, 0.94f, 1.00f, 0.85f));
+                shard.transform.rotation = Random.rotation;
+                var rb = shard.AddComponent<Rigidbody>();
+                rb.mass = 0.12f;
+                rb.linearVelocity = new Vector3(Random.Range(-5.5f, 5.5f), Random.Range(3.2f, 8.2f), Random.Range(4.0f, 11.5f));
+                rb.angularVelocity = Random.insideUnitSphere * 12f;
+                Destroy(shard, 1.15f);
             }
         }
 
@@ -1800,12 +2054,64 @@ namespace Jelly
             obs.resolved = true;
             ComboCount++;
             AddScoreWithCombo(basePoints);
-            _wobbleAmplitude = 0.18f;
+            _wobbleAmplitude = 0.24f;
             _wobblePhase = 0f;
+
+            // Squish & Pop squeeze animation on narrow gates & flexible squeeze corridors + FOV pop!
+            if (obs.obstacleType == EndlessObstacleType.SmallCenterHole ||
+                obs.obstacleType == EndlessObstacleType.FlexibleSqueezeGate ||
+                obs.obstacleType == EndlessObstacleType.VerticalCrusherGate ||
+                obs.obstacleType == EndlessObstacleType.SlidingHoleWall)
+            {
+                TriggerDeformerSqueeze(0.42f, 0.30f);
+                _cameraFovPunch = Mathf.Max(_cameraFovPunch, 3.8f);
+                _audio?.PlayGateSqueeze(SoundEnabled, VibrationEnabled, ComboCount);
+            }
+            else if (obs.obstacleType == EndlessObstacleType.HeavySmashWall)
+            {
+                _cameraFovPunch = Mathf.Max(_cameraFovPunch, 5.2f);
+                _cameraShakeTimer = 0.22f;
+                _cameraShakeAmp = 0.16f;
+                _audio?.PlayCrystalSmash(SoundEnabled, VibrationEnabled);
+                SpawnCrystalShatterBurst(obs.transform.position + Vector3.up * 1.1f);
+            }
+            else
+            {
+                _audio?.PlayGateSqueeze(SoundEnabled, VibrationEnabled, ComboCount);
+            }
+
             if (primaryPlayer != null)
                 SpawnJellySplash(primaryPlayer.transform.position, new Color(0.25f, 0.98f, 0.65f), 8);
             int mult = Mathf.Clamp(1 + ComboCount / 2, 1, 5);
             SetBanner(mult > 1 ? $"{bannerMsg} [🔥 x{mult} KOMBO!]" : bannerMsg, 2.2f);
+        }
+
+        private void TriggerDeformerSqueeze(float intensity, float duration)
+        {
+            if (primaryPlayer != null)
+            {
+                var def = primaryPlayer.GetComponentInChildren<JellyRealtimeDeformer>();
+                if (def != null) def.TriggerGateSqueeze(intensity, duration);
+            }
+            if (_secondarySplitVisual != null && _secondarySplitVisual.activeSelf)
+            {
+                var def2 = _secondarySplitVisual.GetComponentInChildren<JellyRealtimeDeformer>();
+                if (def2 != null) def2.TriggerGateSqueeze(intensity, duration);
+            }
+        }
+
+        private void TriggerDeformerWallImpact()
+        {
+            if (primaryPlayer != null)
+            {
+                var def = primaryPlayer.GetComponentInChildren<JellyRealtimeDeformer>();
+                if (def != null) def.TriggerWallImpact();
+            }
+            if (_secondarySplitVisual != null && _secondarySplitVisual.activeSelf)
+            {
+                var def2 = _secondarySplitVisual.GetComponentInChildren<JellyRealtimeDeformer>();
+                if (def2 != null) def2.TriggerWallImpact();
+            }
         }
 
         private void SacrificeOneSplitPieceAndContinue(EndlessGateObstacle obs, float survivingLateralX, string message)
@@ -1859,8 +2165,12 @@ namespace Jelly
 
             ComboCount = 0;
             obs.hasBouncedOnce = true;
-            _wobbleAmplitude = 0.38f;
+            _wobbleAmplitude = 0.42f;
             _wobblePhase = 0f;
+            _cameraShakeTimer = 0.24f;
+            _cameraShakeAmp = 0.18f;
+            _audio?.PlayWallThud(SoundEnabled, VibrationEnabled);
+            TriggerDeformerWallImpact();
             CurrentMass -= 22f;
 
             if (primaryPlayer != null)
@@ -2009,14 +2319,9 @@ namespace Jelly
 
             // 3D Inclined Launch Ramp Wedge at zStart + 2.2m
             EvaluateRoadCurve(zStart + 2.2f, out Vector3 rampPos, out Quaternion rampRot, out _);
-            var rampGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            rampGo.name = "LaunchRampWedge";
-            DestroyCollider(rampGo);
-            rampGo.transform.SetParent(root.transform, false);
+            var rampGo = CreateWallBlock(root.transform, "LaunchRampWedge", Vector3.zero, new Vector3(4.6f, 0.45f, 2.6f), null, new Color(1.00f, 0.78f, 0.16f));
             rampGo.transform.position = rampPos + (rampRot * Vector3.up) * 0.32f;
             rampGo.transform.rotation = rampRot * Quaternion.Euler(-16f, 0f, 0f);
-            rampGo.transform.localScale = new Vector3(4.6f, 0.45f, 2.6f);
-            LevelLoader.ApplyMaterialOrColor(rampGo, null, new Color(1.00f, 0.78f, 0.16f));
 
             // Floating Golden Aerial Ring above the chasm at zStart + 6.5m!
             EvaluateRoadCurve(zStart + 6.5f, out Vector3 ringCenter, out Quaternion ringRot, out _);
@@ -2058,14 +2363,9 @@ namespace Jelly
 
             // Launch Ramp at entrance (zStart + 0.8m) to reach the 2nd-floor Overpass!
             EvaluateRoadCurve(zStart + 0.8f, out Vector3 rPos, out Quaternion rRot, out _);
-            var upRamp = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            upRamp.name = "OverpassEntryRamp";
-            DestroyCollider(upRamp);
-            upRamp.transform.SetParent(root.transform, false);
+            var upRamp = CreateWallBlock(root.transform, "OverpassEntryRamp", Vector3.zero, new Vector3(3.4f, 0.45f, 2.8f), null, new Color(0.22f, 0.92f, 0.62f));
             upRamp.transform.position = rPos + (rRot * Vector3.up) * 0.42f;
             upRamp.transform.rotation = rRot * Quaternion.Euler(-20f, 0f, 0f);
-            upRamp.transform.localScale = new Vector3(3.4f, 0.45f, 2.8f);
-            LevelLoader.ApplyMaterialOrColor(upRamp, null, new Color(0.22f, 0.92f, 0.62f));
 
             // 2. Elevated 2nd-Floor Overpass Bridge (Y = +2.4m) with Breakable Glass Middle Section!
             CreateSubRibbonObject(root.transform, "UpperDeckEntry", zStart + 2.4f, node.glassFloorZStart, 6, -2.5f, +2.5f, -0.22f, 0f, node.upperDeckHeight, biome.StripeColor);
@@ -2260,8 +2560,8 @@ namespace Jelly
                 node.requiredMassToBreak = reqMasses[k];
                 node.isFinalGoalLine = isFinal;
 
-                CreateWallBlock(nodeGo.transform, "PillarL", new Vector3(-2.85f, 1.3f, 0f), new Vector3(0.6f, 2.6f, 0.55f), null, new Color(0.18f, 0.22f, 0.34f));
-                CreateWallBlock(nodeGo.transform, "PillarR", new Vector3(+2.85f, 1.3f, 0f), new Vector3(0.6f, 2.6f, 0.55f), null, new Color(0.18f, 0.22f, 0.34f));
+                CreateWallBlock(nodeGo.transform, "PillarL", new Vector3(-2.85f, 1.3f, 0f), new Vector3(0.6f, 2.6f, 0.55f), null, new Color(0.34f, 0.24f, 0.72f));
+                CreateWallBlock(nodeGo.transform, "PillarR", new Vector3(+2.85f, 1.3f, 0f), new Vector3(0.6f, 2.6f, 0.55f), null, new Color(0.34f, 0.24f, 0.72f));
                 var breakable = CreateWallBlock(nodeGo.transform, $"Wall_x{mults[k]}", new Vector3(0f, 1.15f, 0f), new Vector3(5.1f, 2.2f, 0.38f), null, wallCols[k]);
                 node.breakableWallVisual = breakable.transform;
                 _activeSegmentNodes.Add(node);
@@ -2280,33 +2580,55 @@ namespace Jelly
             float barrierHeight = 0.62f;
             float roadThickness = 0.45f;
 
-            // Main glossy spline track surface
+            // Main ceramic tile track surface (3-lane warm-cream & mint tiles)
             CreateSubRibbonObject(chunkGo.transform, "RoadSurfaceMesh", zStart, zEnd, steps, -halfRoad, +halfRoad, -roadThickness, 0f, yOffset, customRoadColor ?? biome.RoadSurfaceColor);
+            // Turquoise outer track trim skirt
+            CreateSubRibbonObject(chunkGo.transform, "LeftSideSkirt", zStart, zEnd, steps, -halfRoad - 0.16f, -halfRoad, -roadThickness - 0.06f, 0.08f, yOffset, new Color(0.22f, 0.80f, 0.90f));
+            CreateSubRibbonObject(chunkGo.transform, "RightSideSkirt", zStart, zEnd, steps, +halfRoad, +halfRoad + 0.16f, -roadThickness - 0.06f, 0.08f, yOffset, new Color(0.22f, 0.80f, 0.90f));
 
-            // Neon lane stripes (center + left/right lane guides like Reference Section 4)
-            CreateSubRibbonObject(chunkGo.transform, "CenterStripeMesh", zStart, zEnd, steps, -0.09f, +0.09f, 0.0f, 0.025f, yOffset, biome.StripeColor);
-            CreateSubRibbonObject(chunkGo.transform, "LeftLaneNeonLine", zStart, zEnd, steps, -halfRoad + 0.18f, -halfRoad + 0.30f, 0.0f, 0.022f, yOffset, biome.CurbColor);
-            CreateSubRibbonObject(chunkGo.transform, "RightLaneNeonLine", zStart, zEnd, steps, +halfRoad - 0.30f, +halfRoad - 0.18f, 0.0f, 0.022f, yOffset, biome.CurbColor);
+            // Crisp dashed teal center stripe
+            int dashCount = 4;
+            float segLen = (zEnd - zStart) / dashCount;
+            for (int d = 0; d < dashCount; d++)
+            {
+                float dStart = zStart + d * segLen + segLen * 0.18f;
+                float dEnd = zStart + (d + 1) * segLen - segLen * 0.18f;
+                CreateSubRibbonObject(chunkGo.transform, "CenterStripeMesh", dStart, dEnd, Mathf.Max(2, steps / dashCount), -0.065f, +0.065f, 0.0f, 0.016f, yOffset, biome.StripeColor);
+            }
 
-            // Translucent Glass / Neon Side Barriers (Reference Section 4: "Kenar Bariyeri - cam/neon")
-            Color glassWallCol = new Color(biome.CurbColor.r, biome.CurbColor.g, biome.CurbColor.b, 0.46f);
-            CreateSubRibbonObject(chunkGo.transform, "LeftGlassBarrier", zStart, zEnd, steps, -halfRoad - curbWidth, -halfRoad, -0.08f, barrierHeight, yOffset, glassWallCol);
-            CreateSubRibbonObject(chunkGo.transform, "RightGlassBarrier", zStart, zEnd, steps, +halfRoad, +halfRoad + curbWidth, -0.08f, barrierHeight, yOffset, glassWallCol);
+            // Chunky Cylindrical Waterpark Bumper Tubes (Alternating Coral-Orange & Aqua every 6m, matching Alternative 1!)
+            int railSegs = 2;
+            float rLen = (zEnd - zStart) / railSegs;
+            for (int r = 0; r < railSegs; r++)
+            {
+                float rz0 = zStart + r * rLen + 0.05f;
+                float rz1 = zStart + (r + 1) * rLen - 0.05f;
+                int subSteps = Mathf.Max(4, steps / railSegs);
+                bool leftCoral = ((Mathf.FloorToInt(rz0 / 6f) + 0) % 2) == 0;
+                Color leftCol = leftCoral ? biome.PropColor : biome.CurbColor;
+                Color rightCol = leftCoral ? biome.CurbColor : biome.PropColor;
+                CreateExtrudedTubeObject(chunkGo.transform, "LeftBumperTube", rz0, rz1, subSteps, -halfRoad - 0.14f, yOffset + 0.28f, 0.28f, leftCol);
+                CreateExtrudedTubeObject(chunkGo.transform, "RightBumperTube", rz0, rz1, subSteps, +halfRoad + 0.14f, yOffset + 0.28f, 0.28f, rightCol);
+            }
 
-            // Glowing Top Neon Rails on the Glass Barriers
-            CreateSubRibbonObject(chunkGo.transform, "LeftNeonTopRail", zStart, zEnd, steps, -halfRoad - curbWidth - 0.04f, -halfRoad + 0.04f, barrierHeight, barrierHeight + 0.11f, yOffset, biome.CurbColor);
-            CreateSubRibbonObject(chunkGo.transform, "RightNeonTopRail", zStart, zEnd, steps, +halfRoad - 0.04f, +halfRoad + curbWidth + 0.04f, barrierHeight, barrierHeight + 0.11f, yOffset, biome.CurbColor);
-
-            // Glowing Forward Chevron Arrows (>>>) on the road surface
+            // Stacked Double Forward Chevron Pairs (>>) left & right of centerline
             float zMid = (zStart + zEnd) * 0.5f;
-            EvaluateRoadCurve(zMid, out Vector3 cPos, out Quaternion cRot, out Vector3 cRight);
-            Vector3 cUp = cRot * Vector3.up;
-            var chevL = CreateWallBlock(chunkGo.transform, "RoadChevronL", Vector3.zero, new Vector3(0.55f, 0.025f, 0.16f), null, new Color(0.28f, 0.94f, 1.00f));
-            chevL.transform.position = cPos - cRight * 0.20f + cUp * (yOffset + 0.022f);
-            chevL.transform.rotation = cRot * Quaternion.Euler(0f, 32f, 0f);
-            var chevR = CreateWallBlock(chunkGo.transform, "RoadChevronR", Vector3.zero, new Vector3(0.55f, 0.025f, 0.16f), null, new Color(0.28f, 0.94f, 1.00f));
-            chevR.transform.position = cPos + cRight * 0.20f + cUp * (yOffset + 0.022f);
-            chevR.transform.rotation = cRot * Quaternion.Euler(0f, -32f, 0f);
+            Color chevCol = new Color(0.16f, 0.88f, 0.96f);
+            for (int pair = 0; pair < 2; pair++)
+            {
+                EvaluateRoadCurve(zMid - 0.26f + pair * 0.52f, out Vector3 cPos, out Quaternion cRot, out Vector3 cRight);
+                Vector3 cUp = cRot * Vector3.up;
+                for (int lane = -1; lane <= 1; lane += 2)
+                {
+                    Vector3 laneCenter = cPos + cRight * (lane * 1.38f) + cUp * (yOffset + 0.018f);
+                    var chevL = CreateWallBlock(chunkGo.transform, "RoadChevronL", Vector3.zero, new Vector3(0.46f, 0.015f, 0.11f), null, chevCol);
+                    chevL.transform.position = laneCenter - cRight * 0.15f;
+                    chevL.transform.rotation = cRot * Quaternion.Euler(0f, -34f, 0f);
+                    var chevR = CreateWallBlock(chunkGo.transform, "RoadChevronR", Vector3.zero, new Vector3(0.46f, 0.015f, 0.11f), null, chevCol);
+                    chevR.transform.position = laneCenter + cRight * 0.15f;
+                    chevR.transform.rotation = cRot * Quaternion.Euler(0f, 34f, 0f);
+                }
+            }
 
             return chunkGo;
         }
@@ -2326,89 +2648,160 @@ namespace Jelly
             midGo.transform.SetParent(trackRoot, false);
             _parallaxMidRoot = midGo.transform;
 
-            // 1. Far Parallax Layer (Distant Floating Horizon Mountains, Giant Pastel Planet/Moon, High Clouds)
-            int farCount = Mathf.CeilToInt(totalTrackLen / 24f) + 4;
-            for (int i = -1; i < farCount; i++)
+            // 1. Far Parallax Layer: Stacked Translucent Pastel Jelly Towers on the Horizon & Big Cartoon Clouds
+            Color[] jellyTowerCols = new[]
             {
-                float z = i * 24f;
-                float side = (i % 2 == 0) ? -1f : 1f;
-                float x = side * (32f + (i % 3) * 8f);
-                float y = -6f + (i % 4) * 3.5f;
-
-                var mountain = new GameObject($"FarHorizonPeak_{i}").transform;
-                mountain.SetParent(_parallaxFarRoot, false);
-                mountain.localPosition = new Vector3(x, y, z);
-
-                Color peakCol = Color.Lerp(biome.SkyColor, biome.PropColor, 0.35f);
-                CreateWallBlock(mountain, "PeakMain", new Vector3(0f, 6f, 0f), new Vector3(14f, 18f, 14f), null, peakCol).transform.localRotation = Quaternion.Euler(12f, 35f, 18f);
-                CreateWallBlock(mountain, "PeakSnowCap", new Vector3(0f, 13.5f, 0f), new Vector3(6.5f, 6.5f, 6.5f), null, biome.CloudColor).transform.localRotation = Quaternion.Euler(20f, 45f, 20f);
-
-                // Distant puffy cloud cluster
-                var farCloud = new GameObject($"FarCloud_{i}").transform;
-                farCloud.SetParent(_parallaxFarRoot, false);
-                farCloud.localPosition = new Vector3(-side * (26f + (i % 2) * 9f), 14f + (i % 3) * 3f, z + 10f);
-                var c1 = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                DestroyCollider(c1);
-                c1.transform.SetParent(farCloud, false);
-                c1.transform.localScale = new Vector3(9.5f, 2.8f, 5.2f);
-                LevelLoader.ApplyMaterialOrColor(c1, null, biome.CloudColor);
-            }
-
-            // 2. Mid Parallax Layer (3D Floating Sky Islands with Crystal Cones, Trees, Towers & Bobbing Motion!)
-            int islandCount = Mathf.CeilToInt(totalTrackLen / 16f) + 3;
-            for (int i = 0; i < islandCount; i++)
+                new Color(0.32f, 0.90f, 0.88f), // Pastel Aqua Jelly
+                new Color(0.62f, 0.94f, 0.80f), // Pastel Mint Jelly
+                new Color(0.98f, 0.66f, 0.86f), // Pastel Pink Jelly
+                new Color(1.00f, 0.78f, 0.58f)  // Pastel Peach Jelly
+            };
+            int farCount = Mathf.CeilToInt(totalTrackLen / 22f) + 4;
+            for (int i = 0; i < farCount; i++)
             {
-                float z = i * 16f + 6f;
-                EvaluateRoadCurve(Mathf.Min(z, totalTrackLen), out Vector3 roadPt, out _, out Vector3 roadRight);
+                float z = i * 22f + 16f;
                 float side = (i % 2 == 0) ? -1f : 1f;
-                float distOut = 14.5f + (i % 3) * 4.2f;
-                float heightOffset = 1.8f + (i % 4) * 1.9f;
+                float x = side * (16f + (i % 3) * 5.5f);
 
-                var island = new GameObject($"FloatingSkyIsland_{i}").transform;
-                island.SetParent(_parallaxMidRoot, false);
-                island.position = roadPt + roadRight * (side * distOut) + Vector3.up * heightOffset;
-                _floatingIslands.Add(island);
-
-                float scaleFactor = 1.35f + (i % 3) * 0.25f;
-                var blenderIsland = BlenderKitModelSpawner.InstantiateModelGroup("Deko_Island", island, alignBottomToZero: false, uniformScale: scaleFactor);
-                if (blenderIsland != null)
+                // 3-Tier Stacked Pastel Jelly Mould Tower rising from the pool horizon
+                var tower = new GameObject($"PastelJellyTower_{i}").transform;
+                tower.SetParent(_parallaxFarRoot, false);
+                tower.localPosition = new Vector3(x, -1.35f, z);
+                int tiers = (i % 2 == 0) ? 3 : 2;
+                for (int t = 0; t < tiers; t++)
                 {
-                    blenderIsland.transform.localRotation = Quaternion.Euler(0f, (i * 55f) % 360f, 0f);
-                    continue;
+                    var tierCyl = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    DestroyCollider(tierCyl);
+                    tierCyl.name = $"JellyTier_{t}";
+                    tierCyl.transform.SetParent(tower, false);
+                    float w = 5.4f - t * 0.85f;
+                    tierCyl.transform.localPosition = new Vector3(0f, 1.3f + t * 2.4f, 0f);
+                    tierCyl.transform.localScale = new Vector3(w, 1.25f, w);
+                    LevelLoader.ApplyMaterialOrColor(tierCyl, null, jellyTowerCols[(i + t) % jellyTowerCols.Length]);
                 }
 
-                // Island Top Deck (Grass / Candy / Ice / Lava / Space top)
-                var topDeck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                DestroyCollider(topDeck);
-                topDeck.name = "IslandTopSurface";
-                topDeck.transform.SetParent(island, false);
-                float radius = 3.6f + (i % 3) * 0.9f;
-                topDeck.transform.localScale = new Vector3(radius, 0.45f, radius);
-                LevelLoader.ApplyMaterialOrColor(topDeck, null, biome.StripeColor);
+                // Big puffy white cartoon cloud clusters well above the horizon towers!
+                var farCloud = new GameObject($"FarCloud_{i}").transform;
+                farCloud.SetParent(_parallaxFarRoot, false);
+                farCloud.localPosition = new Vector3(-side * (16f + (i % 2) * 8f), 12.8f + (i % 3) * 2.8f, z + 10f);
+                Vector3[] puffOffsets = new[]
+                {
+                    Vector3.zero,
+                    new Vector3(2.8f, -0.5f, 0.3f),
+                    new Vector3(-2.7f, -0.6f, -0.2f),
+                    new Vector3(0.8f, 1.2f, 0f)
+                };
+                Vector3[] puffScales = new[]
+                {
+                    new Vector3(6.4f, 3.8f, 4.2f),
+                    new Vector3(4.8f, 3.0f, 3.6f),
+                    new Vector3(4.6f, 2.8f, 3.4f),
+                    new Vector3(4.2f, 3.2f, 3.4f)
+                };
+                for (int p = 0; p < puffOffsets.Length; p++)
+                {
+                    var puff = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    DestroyCollider(puff);
+                    puff.transform.SetParent(farCloud, false);
+                    puff.transform.localPosition = puffOffsets[p];
+                    puff.transform.localScale = puffScales[p];
+                    LevelLoader.ApplyMaterialOrColor(puff, null, Color.white);
+                }
+            }
 
-                // Island Underside Rock / Crystal Cone
-                var underRock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                DestroyCollider(underRock);
-                underRock.name = "IslandUnderRock";
-                underRock.transform.SetParent(island, false);
-                underRock.transform.localPosition = new Vector3(0f, -1.6f, 0f);
-                underRock.transform.localRotation = Quaternion.Euler(35f, 45f, 35f);
-                underRock.transform.localScale = new Vector3(radius * 0.65f, radius * 0.85f, radius * 0.65f);
-                LevelLoader.ApplyMaterialOrColor(underRock, null, Color.Lerp(biome.RoadSurfaceColor, Color.black, 0.25f));
+            // 2. Waterpark Pool Layer: Inflatable Frosted Donut Rings (Torus) & Tilted Candy Buoys floating at y = -1.30f!
+            int propCount = Mathf.CeilToInt(totalTrackLen / 11f) + 4;
+            Color[] buoyColors = new[]
+            {
+                new Color(0.98f, 0.34f, 0.56f), // Hot Pink Buoy
+                new Color(0.68f, 0.46f, 0.96f), // Lavender Buoy
+                new Color(1.00f, 0.80f, 0.20f)  // Sunny Yellow Buoy
+            };
+            Mesh donutMesh = GetOrCreateTorusMesh(1.35f, 0.52f, 28, 16);
+            Mesh icingMesh = GetOrCreateTorusMesh(1.35f, 0.46f, 28, 12);
 
-                // Biome-specific 3D Prop on top of the Floating Island (Jelly Trees, Crystals, Lollipops, Ringed Orbs)
-                CreateWallBlock(island, "IslandTreeTrunk", new Vector3(-0.6f, 1.1f, 0f), new Vector3(0.35f, 1.4f, 0.35f), null, new Color(0.55f, 0.36f, 0.62f));
-                var canopy = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                DestroyCollider(canopy);
-                canopy.name = "IslandJellyCanopy";
-                canopy.transform.SetParent(island, false);
-                canopy.transform.localPosition = new Vector3(-0.6f, 2.2f, 0f);
-                canopy.transform.localScale = new Vector3(1.8f, 1.5f, 1.8f);
-                LevelLoader.ApplyMaterialOrColor(canopy, null, biome.PropColor);
+            for (int i = 0; i < propCount; i++)
+            {
+                float z = i * 11f + 7f;
+                EvaluateRoadCurve(Mathf.Min(z, totalTrackLen), out Vector3 roadPt, out _, out Vector3 roadRight);
+                float side = (i % 2 == 0) ? -1f : 1f;
+                // Keep buoys & donut rings well outside the curving road (11.5m..18m out in open pool water!)
+                float distOut = 11.5f + (i % 3) * 3.4f;
+                Vector3 waterPos = new Vector3(roadPt.x + roadRight.x * (side * distOut), -1.32f, roadPt.z + roadRight.z * (side * distOut));
 
-                // Glowing Crystal Spire on the island
-                var crystal = CreateWallBlock(island, "IslandCrystalSpire", new Vector3(0.85f, 1.25f, 0.3f), new Vector3(0.65f, 2.1f, 0.65f), null, biome.CurbColor);
-                crystal.transform.localRotation = Quaternion.Euler(14f, 45f, -12f);
+                if (i % 2 == 1)
+                {
+                    // Inflatable Frosted Pink Donut Ring floating flat or tilted in the pool!
+                    var donutRoot = new GameObject($"WaterparkDonut_{i}").transform;
+                    donutRoot.SetParent(_parallaxMidRoot, false);
+                    donutRoot.position = waterPos + Vector3.up * (i % 3 == 0 ? 0.85f : 0.12f);
+                    donutRoot.rotation = (i % 3 == 0)
+                        ? Quaternion.Euler(72f, side * -28f, 14f) // Upright floating life-ring pose!
+                        : Quaternion.Euler(6f, i * 35f, -5f);
+                    _floatingIslands.Add(donutRoot);
+
+                    var ringGo = new GameObject("DonutDough");
+                    ringGo.transform.SetParent(donutRoot, false);
+                    ringGo.AddComponent<MeshFilter>().sharedMesh = donutMesh;
+                    ringGo.AddComponent<MeshRenderer>();
+                    LevelLoader.ApplyMaterialOrColor(ringGo, null, new Color(0.96f, 0.72f, 0.48f));
+
+                    var iceGo = new GameObject("DonutPinkIcing");
+                    iceGo.transform.SetParent(donutRoot, false);
+                    iceGo.transform.localPosition = new Vector3(0f, 0.12f, 0f);
+                    iceGo.AddComponent<MeshFilter>().sharedMesh = icingMesh;
+                    iceGo.AddComponent<MeshRenderer>();
+                    LevelLoader.ApplyMaterialOrColor(iceGo, null, new Color(0.98f, 0.52f, 0.74f));
+                }
+                else
+                {
+                    // Playful Tilted Candy Buoy (matching the pink/purple antenna buoys in Alternative 1!)
+                    var buoy = new GameObject($"WaterparkBuoy_{i}").transform;
+                    buoy.SetParent(_parallaxMidRoot, false);
+                    buoy.position = waterPos;
+                    buoy.rotation = Quaternion.Euler(8f, i * 40f, side * -12f);
+                    _floatingIslands.Add(buoy);
+
+                    Color bCol = buoyColors[(i / 2) % buoyColors.Length];
+                    var collar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    DestroyCollider(collar);
+                    collar.name = "BuoyRim";
+                    collar.transform.SetParent(buoy, false);
+                    collar.transform.localScale = new Vector3(2.8f, 0.24f, 2.8f);
+                    LevelLoader.ApplyMaterialOrColor(collar, null, new Color(1.00f, 0.46f, 0.28f));
+
+                    var dome = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    DestroyCollider(dome);
+                    dome.name = "BuoyBell";
+                    dome.transform.SetParent(buoy, false);
+                    dome.transform.localPosition = new Vector3(0f, 0.35f, 0f);
+                    dome.transform.localScale = new Vector3(2.3f, 1.45f, 2.3f);
+                    LevelLoader.ApplyMaterialOrColor(dome, null, bCol);
+
+                    var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    DestroyCollider(ring);
+                    ring.name = "BuoyCapRing";
+                    ring.transform.SetParent(buoy, false);
+                    ring.transform.localPosition = new Vector3(0f, 1.05f, 0f);
+                    ring.transform.localScale = new Vector3(0.95f, 0.14f, 0.95f);
+                    LevelLoader.ApplyMaterialOrColor(ring, null, new Color(1f, 0.84f, 0.88f));
+
+                    var mast = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    DestroyCollider(mast);
+                    mast.name = "BuoyMast";
+                    mast.transform.SetParent(buoy, false);
+                    mast.transform.localPosition = new Vector3(0f, 1.55f, 0f);
+                    mast.transform.localScale = new Vector3(0.22f, 0.55f, 0.22f);
+                    LevelLoader.ApplyMaterialOrColor(mast, null, Color.Lerp(bCol, Color.white, 0.35f));
+
+                    var topper = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    DestroyCollider(topper);
+                    topper.name = "BuoyTopper";
+                    topper.transform.SetParent(buoy, false);
+                    topper.transform.localPosition = new Vector3(0f, 2.15f, 0f);
+                    topper.transform.localScale = new Vector3(0.68f, 0.68f, 0.68f);
+                    LevelLoader.ApplyMaterialOrColor(topper, null, bCol);
+                }
             }
         }
 
@@ -2425,25 +2818,326 @@ namespace Jelly
                 _parallaxMidRoot.position = new Vector3(CurrentLateralOffset * 0.15f, 0f, CurrentDistance * 0.14f);
             }
             float t = Time.time;
+            if (_waterOceanPlane != null)
+            {
+                _waterOceanPlane.position = new Vector3(CurrentLateralOffset * 0.4f, -1.35f, CurrentDistance + 140f);
+                if (_waterOceanMat != null)
+                {
+                    Vector2 off = new Vector2(Mathf.Sin(t * 0.25f) * 0.06f, (t * 0.045f) % 1f);
+                    _waterOceanMat.mainTextureOffset = off;
+                    if (_waterOceanMat.HasProperty("_BaseMap"))
+                        _waterOceanMat.SetTextureOffset("_BaseMap", off);
+                }
+            }
             for (int i = 0; i < _floatingIslands.Count; i++)
             {
                 var isl = _floatingIslands[i];
                 if (isl == null) continue;
                 Vector3 p = isl.localPosition;
-                float bob = Mathf.Sin(t * 1.4f + i * 0.9f) * 0.35f * dt;
+                float bob = Mathf.Sin(t * 1.4f + i * 0.9f) * 0.22f * dt;
                 isl.localPosition = new Vector3(p.x, p.y + bob, p.z);
             }
         }
+
+        private Transform _waterOceanPlane;
+        private Material _waterOceanMat;
+        private static Texture2D _cachedWaterCausticsTex;
+
+        private static Texture2D GetOrCreateWaterCausticsTexture()
+        {
+            if (_cachedWaterCausticsTex != null) return _cachedWaterCausticsTex;
+            const int size = 512;
+            _cachedWaterCausticsTex = new Texture2D(size, size, TextureFormat.RGBA32, true)
+            {
+                name = "ProceduralWaterCaustics",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear
+            };
+
+            // Large organic Voronoi F2-F1 swimming-pool caustics (no small brick grid repetition!)
+            const int cells = 8;
+            Vector2[,] pts = new Vector2[cells, cells];
+            for (int cy = 0; cy < cells; cy++)
+            {
+                for (int cx = 0; cx < cells; cx++)
+                {
+                    float hx = Mathf.Abs(Mathf.Sin((cx * 127.1f + cy * 311.7f) * 0.19f));
+                    float hy = Mathf.Abs(Mathf.Cos((cx * 269.5f + cy * 183.3f) * 0.23f));
+                    pts[cx, cy] = new Vector2(cx + 0.12f + hx * 0.76f, cy + 0.12f + hy * 0.76f);
+                }
+            }
+
+            Color32[] pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float uvy = y / (float)size;
+                for (int x = 0; x < size; x++)
+                {
+                    float uvx = x / (float)size;
+                    // Gentle organic domain warp so cells curve softly like sunlit water ripples
+                    float warpX = Mathf.Sin(uvy * Mathf.PI * 4f) * 0.18f;
+                    float warpY = Mathf.Cos(uvx * Mathf.PI * 4f) * 0.18f;
+                    float px = Mathf.Repeat(uvx * cells + warpX, cells);
+                    float py = Mathf.Repeat(uvy * cells + warpY, cells);
+                    int ix = Mathf.FloorToInt(px);
+                    int iy = Mathf.FloorToInt(py);
+
+                    float d1 = 99f;
+                    float d2 = 99f;
+                    for (int oy = -1; oy <= 1; oy++)
+                    {
+                        int wy = (iy + oy + cells) % cells;
+                        for (int ox = -1; ox <= 1; ox++)
+                        {
+                            int wx = (ix + ox + cells) % cells;
+                            Vector2 fp = pts[wx, wy] + new Vector2(ix + ox - wx, iy + oy - wy);
+                            float dist = Vector2.Distance(new Vector2(px, py), fp);
+                            if (dist < d1) { d2 = d1; d1 = dist; }
+                            else if (dist < d2) { d2 = dist; }
+                        }
+                    }
+
+                    float edge = Mathf.Clamp01(1f - (d2 - d1) * 5.4f);
+                    float caustic = Mathf.Pow(edge, 2.5f);
+                    byte r = (byte)Mathf.Lerp(24f, 232f, caustic);
+                    byte g = (byte)Mathf.Lerp(198f, 253f, caustic);
+                    byte b = (byte)Mathf.Lerp(242f, 255f, caustic);
+                    pixels[y * size + x] = new Color32(r, g, b, 255);
+                }
+            }
+            _cachedWaterCausticsTex.SetPixels32(pixels);
+            _cachedWaterCausticsTex.Apply(true);
+            return _cachedWaterCausticsTex;
+        }
+
+        private void EnsureWaterparkOceanPlane(BiomePalette biome)
+        {
+            if (_waterOceanPlane == null)
+            {
+                var waterGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                waterGo.name = "WaterparkOceanPlane";
+                DestroyCollider(waterGo);
+                waterGo.transform.SetParent(trackRoot != null ? trackRoot : transform, false);
+                waterGo.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                waterGo.transform.localScale = new Vector3(420f, 900f, 1f);
+                _waterOceanPlane = waterGo.transform;
+
+                var mr = waterGo.GetComponent<MeshRenderer>();
+                LevelLoader.ApplyMaterialOrColor(waterGo, null, Color.white);
+                if (mr != null && mr.sharedMaterial != null)
+                {
+                    _waterOceanMat = new Material(mr.sharedMaterial) { name = "WaterparkOceanMat" };
+                    var tex = GetOrCreateWaterCausticsTexture();
+                    _waterOceanMat.mainTexture = tex;
+                    _waterOceanMat.mainTextureScale = new Vector2(6f, 13f);
+                    if (_waterOceanMat.HasProperty("_BaseMap"))
+                    {
+                        _waterOceanMat.SetTexture("_BaseMap", tex);
+                        _waterOceanMat.SetTextureScale("_BaseMap", new Vector2(6f, 13f));
+                    }
+                    if (_waterOceanMat.HasProperty("_Smoothness")) _waterOceanMat.SetFloat("_Smoothness", 0.55f);
+                    mr.sharedMaterial = _waterOceanMat;
+                }
+            }
+            _waterOceanPlane.position = new Vector3(CurrentLateralOffset * 0.4f, -1.35f, CurrentDistance + 140f);
+        }
+
+        private static Texture2D _cachedRoadGridTex;
+
+        private static Texture2D GetOrCreateRoadGridTexture()
+        {
+            if (_cachedRoadGridTex != null) return _cachedRoadGridTex;
+            const int size = 256;
+            _cachedRoadGridTex = new Texture2D(size, size, TextureFormat.RGBA32, true)
+            {
+                name = "ProceduralRoadGrid",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear
+            };
+            // Top surface maps to UV X in [0.25 .. 0.75] (pixels 64..192):
+            // Left Mint Lane = 64..105 | Center Warm Vanilla-Cream Lane = 108..148 | Right Mint Lane = 151..192
+            Color32 creamTile = new Color32(255, 248, 228, 255);
+            Color32 mintTile = new Color32(208, 242, 220, 255);
+            Color32 mintAlt = new Color32(200, 236, 214, 255);
+            Color32 groutLine = new Color32(168, 204, 188, 255);
+            Color32 sideWall = new Color32(186, 226, 208, 255);
+
+            Color32[] pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                bool yGrout = (y % 85) < 2;
+                int rowIdx = (y / 85) & 1;
+                for (int x = 0; x < size; x++)
+                {
+                    if (x < 64 || x > 192)
+                    {
+                        pixels[y * size + x] = sideWall;
+                        continue;
+                    }
+                    bool xGrout = (x == 64) || (x >= 106 && x <= 107) || (x >= 149 && x <= 150) || (x == 192);
+                    if (xGrout || yGrout)
+                    {
+                        pixels[y * size + x] = groutLine;
+                    }
+                    else if (x > 107 && x < 149)
+                    {
+                        pixels[y * size + x] = creamTile;
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = (rowIdx == 0) ? mintTile : mintAlt;
+                    }
+                }
+            }
+            _cachedRoadGridTex.SetPixels32(pixels);
+            _cachedRoadGridTex.Apply(true);
+            return _cachedRoadGridTex;
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<Color, Material> _cachedRoadGridMats = new System.Collections.Generic.Dictionary<Color, Material>();
 
         private GameObject CreateSubRibbonObject(Transform parent, string name, float zStart, float zEnd, int steps, float xMin, float xMax, float yMin, float yMax, float yOffset, Color color)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             var mf = go.AddComponent<MeshFilter>();
-            go.AddComponent<MeshRenderer>();
+            var mr = go.AddComponent<MeshRenderer>();
             mf.sharedMesh = CreateExtrudedRibbonMesh(zStart, zEnd, steps, xMin, xMax, yMin + yOffset, yMax + yOffset);
             LevelLoader.ApplyMaterialOrColor(go, null, color);
+            if (name == "RoadSurfaceMesh" && mr.sharedMaterial != null)
+            {
+                if (!_cachedRoadGridMats.TryGetValue(color, out Material mat) || mat == null)
+                {
+                    mat = new Material(mr.sharedMaterial) { name = "RoadGridMat" };
+                    var gridTex = GetOrCreateRoadGridTexture();
+                    mat.mainTexture = gridTex;
+                    mat.mainTextureScale = new Vector2(1f, 1.5f);
+                    if (mat.HasProperty("_BaseMap"))
+                    {
+                        mat.SetTexture("_BaseMap", gridTex);
+                        mat.SetTextureScale("_BaseMap", new Vector2(1f, 1.5f));
+                    }
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.32f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.0f);
+                    _cachedRoadGridMats[color] = mat;
+                }
+                mr.sharedMaterial = mat;
+            }
             return go;
+        }
+
+        private GameObject CreateExtrudedTubeObject(Transform parent, string name, float zStart, float zEnd, int steps, float xOffset, float yCenter, float radius, Color color)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var mf = go.AddComponent<MeshFilter>();
+            var mr = go.AddComponent<MeshRenderer>();
+
+            const int radialSegs = 14;
+            int rings = steps + 1;
+            Vector3[] verts = new Vector3[rings * radialSegs];
+            int[] tris = new int[steps * radialSegs * 6];
+
+            for (int i = 0; i < rings; i++)
+            {
+                float z = Mathf.Lerp(zStart, zEnd, i / (float)steps);
+                EvaluateRoadCurve(z, out Vector3 cPos, out Quaternion cRot, out Vector3 cRight);
+                Vector3 cUp = cRot * Vector3.up;
+                Vector3 ringCenter = cPos + cRight * xOffset + cUp * yCenter;
+                for (int r = 0; r < radialSegs; r++)
+                {
+                    float ang = (r / (float)radialSegs) * Mathf.PI * 2f;
+                    verts[i * radialSegs + r] = ringCenter + (cRight * Mathf.Cos(ang) + cUp * Mathf.Sin(ang)) * radius;
+                }
+            }
+
+            // Outward-facing clockwise winding in Unity's left-handed space (+Z forward, +X right, +Y up)
+            int ti = 0;
+            for (int i = 0; i < steps; i++)
+            {
+                int b0 = i * radialSegs;
+                int b1 = (i + 1) * radialSegs;
+                for (int r = 0; r < radialSegs; r++)
+                {
+                    int nr = (r + 1) % radialSegs;
+                    tris[ti++] = b0 + r; tris[ti++] = b1 + nr; tris[ti++] = b1 + r;
+                    tris[ti++] = b0 + r; tris[ti++] = b0 + nr; tris[ti++] = b1 + nr;
+                }
+            }
+
+            var mesh = new Mesh { name = "SplineBumperTube" };
+            mesh.vertices = verts;
+            mesh.triangles = tris;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            mf.sharedMesh = mesh;
+            LevelLoader.ApplyMaterialOrColor(go, null, color);
+            if (mr.sharedMaterial != null)
+            {
+                var tubeMat = new Material(mr.sharedMaterial) { name = "BumperTubeGlossMat" };
+                if (tubeMat.HasProperty("_Smoothness")) tubeMat.SetFloat("_Smoothness", 0.72f);
+                if (tubeMat.HasProperty("_Metallic")) tubeMat.SetFloat("_Metallic", 0.0f);
+                mr.sharedMaterial = tubeMat;
+            }
+
+            // Plump rounded sausage endcaps at zStart and zEnd (matching Alternative 1 toy bumper segments!)
+            EvaluateRoadCurve(zStart, out Vector3 sPos, out Quaternion sRot, out Vector3 sRight);
+            var capStart = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            capStart.name = "TubeCapStart";
+            DestroyCollider(capStart);
+            capStart.transform.SetParent(go.transform, false);
+            capStart.transform.position = sPos + sRight * xOffset + (sRot * Vector3.up) * yCenter;
+            capStart.transform.localScale = Vector3.one * (radius * 2.0f);
+            if (mr.sharedMaterial != null) capStart.GetComponent<MeshRenderer>().sharedMaterial = mr.sharedMaterial;
+
+            EvaluateRoadCurve(zEnd, out Vector3 ePos, out Quaternion eRot, out Vector3 eRight);
+            var capEnd = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            capEnd.name = "TubeCapEnd";
+            DestroyCollider(capEnd);
+            capEnd.transform.SetParent(go.transform, false);
+            capEnd.transform.position = ePos + eRight * xOffset + (eRot * Vector3.up) * yCenter;
+            capEnd.transform.localScale = Vector3.one * (radius * 2.0f);
+            if (mr.sharedMaterial != null) capEnd.GetComponent<MeshRenderer>().sharedMaterial = mr.sharedMaterial;
+
+            return go;
+        }
+
+        private static Mesh GetOrCreateTorusMesh(float majorR, float minorR, int majorSegs, int minorSegs)
+        {
+            Vector3[] verts = new Vector3[majorSegs * minorSegs];
+            int[] tris = new int[majorSegs * minorSegs * 6];
+            for (int i = 0; i < majorSegs; i++)
+            {
+                float u = (i / (float)majorSegs) * Mathf.PI * 2f;
+                float cu = Mathf.Cos(u), su = Mathf.Sin(u);
+                for (int j = 0; j < minorSegs; j++)
+                {
+                    float v = (j / (float)minorSegs) * Mathf.PI * 2f;
+                    float r = majorR + minorR * Mathf.Cos(v);
+                    verts[i * minorSegs + j] = new Vector3(r * cu, minorR * Mathf.Sin(v), r * su);
+                }
+            }
+            int ti = 0;
+            for (int i = 0; i < majorSegs; i++)
+            {
+                int ni = (i + 1) % majorSegs;
+                for (int j = 0; j < minorSegs; j++)
+                {
+                    int nj = (j + 1) % minorSegs;
+                    int a = i * minorSegs + j;
+                    int b = ni * minorSegs + j;
+                    int c = ni * minorSegs + nj;
+                    int d = i * minorSegs + nj;
+                    tris[ti++] = a; tris[ti++] = c; tris[ti++] = b;
+                    tris[ti++] = a; tris[ti++] = d; tris[ti++] = c;
+                }
+            }
+            var mesh = new Mesh { name = "ProceduralTorus" };
+            mesh.vertices = verts;
+            mesh.triangles = tris;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private static Mesh CreateExtrudedRibbonMesh(float zStart, float zEnd, int steps, float xMin, float xMax, float yMin, float yMax)
@@ -2503,41 +3197,16 @@ namespace Jelly
         private void SpawnChunkSceneryAndClouds(Transform chunkRoot, float zMid, int chunkIdx, BiomePalette biome)
         {
             EvaluateRoadCurve(zMid, out Vector3 center, out Quaternion rot, out Vector3 right);
-            Vector3 up = rot * Vector3.up;
-            float sideDist = roadWidth * 0.5f + 2.2f;
-
-            // Roadside Crystal Clusters (Reference Section 4: "Tema Dekorları - jöle adaları, kristaller")
+            // Support columns descending from underneath the curved track into the pool water (matching Alternative 1!)
             for (int s = -1; s <= 1; s += 2)
             {
-                var cluster = new GameObject(s < 0 ? "CrystalClusterL" : "CrystalClusterR").transform;
-                cluster.SetParent(chunkRoot, false);
-                cluster.position = center + right * (s * sideDist) + up * 0.2f;
-                cluster.rotation = rot;
-
-                var cMain = CreateWallBlock(cluster, "CrystalMain", new Vector3(0f, 0.9f, 0f), new Vector3(0.55f, 2.2f, 0.55f), null, biome.PropColor);
-                cMain.transform.localRotation = Quaternion.Euler(10f, 35f, s * -14f);
-
-                var cSub = CreateWallBlock(cluster, "CrystalSub", new Vector3(s * 0.45f, 0.5f, 0.3f), new Vector3(0.38f, 1.3f, 0.38f), null, biome.CurbColor);
-                cSub.transform.localRotation = Quaternion.Euler(-12f, 20f, s * 22f);
-            }
-
-            // Every 3rd chunk, add a decorative neon overhead arch (Reference Section 4: "Köprü / Rampa")
-            if (chunkIdx % 3 == 0)
-            {
-                var blenderBridge = BlenderKitModelSpawner.InstantiateModelGroup("Track_Bridge", chunkRoot, alignBottomToZero: true, uniformScale: 1.0f);
-                if (blenderBridge != null)
-                {
-                    blenderBridge.transform.SetPositionAndRotation(center + right * ((chunkIdx % 2 == 0 ? -1f : 1f) * 8.2f) - Vector3.up * 0.4f, rot * Quaternion.Euler(0f, 90f, 0f));
-                }
-                else
-                {
-                    var arch = new GameObject("DecorativeNeonArch").transform;
-                    arch.SetParent(chunkRoot, false);
-                    arch.SetPositionAndRotation(center, rot);
-                    CreateWallBlock(arch, "ArchLegL", new Vector3(-3.35f, 1.8f, 0f), new Vector3(0.28f, 3.6f, 0.28f), null, biome.StripeColor);
-                    CreateWallBlock(arch, "ArchLegR", new Vector3(+3.35f, 1.8f, 0f), new Vector3(0.28f, 3.6f, 0.28f), null, biome.StripeColor);
-                    CreateWallBlock(arch, "ArchTop", new Vector3(0f, 3.65f, 0f), new Vector3(7.0f, 0.24f, 0.28f), null, biome.CurbColor);
-                }
+                var colGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                DestroyCollider(colGo);
+                colGo.name = s < 0 ? "TrackWaterColumnL" : "TrackWaterColumnR";
+                colGo.transform.SetParent(chunkRoot, false);
+                colGo.transform.position = center + right * (s * (roadWidth * 0.36f)) + Vector3.down * 1.05f;
+                colGo.transform.localScale = new Vector3(0.48f, 0.85f, 0.48f);
+                LevelLoader.ApplyMaterialOrColor(colGo, null, new Color(0.18f, 0.72f, 0.82f));
             }
         }
 
@@ -2557,9 +3226,8 @@ namespace Jelly
             {
                 case EndlessObstacleType.SmallCenterHole:
                 case EndlessObstacleType.VerticalCrusherGate:
-                    SpawnPickupOnRoad(gateZ - 7.2f, -1.25f, EndlessPickupType.Shrink, 25f);
-                    SpawnPickupOnRoad(gateZ - 7.2f, +1.25f, EndlessPickupType.Grow, 25f);
-                    SpawnPickupOnRoad(gateZ - 4.4f, 0f, EndlessPickupType.Shrink, 25f);
+                    SpawnPickupOnRoad(gateZ - 6.4f, -1.05f, EndlessPickupType.Grow, 25f);
+                    SpawnPickupOnRoad(gateZ - 4.8f, +1.08f, EndlessPickupType.Shrink, 25f);
                     BuildCutoutGate(gateZ, gateType, multiHoleVariant);
                     break;
 
@@ -2643,7 +3311,7 @@ namespace Jelly
         {
             EvaluateRoadCurve(z, out Vector3 center, out Quaternion rot, out Vector3 right);
             Vector3 up = rot * Vector3.up;
-            Vector3 pos = center + right * lateralOffset + up * (type == EndlessPickupType.SpeedBoost ? 0.04f : 0.72f);
+            Vector3 pos = center + right * lateralOffset + up * (type == EndlessPickupType.SpeedBoost ? 0.05f : 0.86f);
 
             string grpName = BlenderKitModelSpawner.GetPickupGroupName(type);
             var blenderPickup = BlenderKitModelSpawner.InstantiateModelGroup(
@@ -2665,6 +3333,22 @@ namespace Jelly
                 bItem.amount = amount;
                 bItem.trackZ = z;
                 if (type == EndlessPickupType.SpeedBoost) bItem.spinSpeed = 0f;
+                else
+                {
+                    // Soft colored ground contact shadow beneath floating glass orbs!
+                    var pShadow = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    pShadow.name = "PickupGroundShadow";
+                    DestroyCollider(pShadow);
+                    pShadow.transform.SetParent(trackRoot, false);
+                    pShadow.transform.position = center + right * lateralOffset + up * 0.02f;
+                    pShadow.transform.rotation = rot;
+                    pShadow.transform.localScale = new Vector3(0.88f, 0.012f, 0.88f);
+                    Color shCol = type == EndlessPickupType.Shrink
+                        ? new Color(0.58f, 0.14f, 0.20f, 0.45f)
+                        : (type == EndlessPickupType.Grow ? new Color(0.08f, 0.44f, 0.24f, 0.45f) : new Color(0.08f, 0.36f, 0.48f, 0.45f));
+                    BlenderKitModelSpawner.ApplySoftShadowDiscMaterial(pShadow, shCol);
+                    _spawnedChunks.Add(pShadow);
+                }
                 _spawnedChunks.Add(blenderPickup);
                 _activePickups.Add(bItem);
                 return;
@@ -3035,15 +3719,94 @@ namespace Jelly
             }
         }
 
+        private static Mesh _beveledBoxMesh;
+
+        private static Mesh GetOrCreateBeveledBoxMesh()
+        {
+            if (_beveledBoxMesh != null) return _beveledBoxMesh;
+
+            // Chamfered 1x1x1 box (Octagonal bevel profile extruded along Y with beveled top/bottom caps)
+            // Gives studio-rounded edges that catch specular highlights cleanly instead of sharp PrimitiveType.Cube!
+            const float c = 0.09f; // Chamfer inset
+            const float h = 0.5f;
+            float inner = h - c;
+
+            var verts = new List<Vector3>();
+            var tris = new List<int>();
+
+            // Build 3 rings along Y: bottom (-h), lower-bevel (-inner), upper-bevel (+inner), top (+h)
+            // Using 8-point chamfered square in XZ:
+            Vector2[] ringXZ = new Vector2[]
+            {
+                new Vector2(-inner, -h), new Vector2( inner, -h),
+                new Vector2( h, -inner), new Vector2( h,  inner),
+                new Vector2( inner,  h), new Vector2(-inner,  h),
+                new Vector2(-h,  inner), new Vector2(-h, -inner)
+            };
+            Vector2[] capXZ = new Vector2[]
+            {
+                new Vector2(-inner * 0.92f, -inner * 0.92f), new Vector2( inner * 0.92f, -inner * 0.92f),
+                new Vector2( inner * 0.92f, -inner * 0.92f), new Vector2( inner * 0.92f,  inner * 0.92f),
+                new Vector2( inner * 0.92f,  inner * 0.92f), new Vector2(-inner * 0.92f,  inner * 0.92f),
+                new Vector2(-inner * 0.92f,  inner * 0.92f), new Vector2(-inner * 0.92f, -inner * 0.92f)
+            };
+
+            float[] ys = { -h, -inner, inner, h };
+            Vector2[][] xzRings = { capXZ, ringXZ, ringXZ, capXZ };
+
+            for (int r = 0; r < 4; r++)
+            {
+                for (int i = 0; i < 8; i++)
+                    verts.Add(new Vector3(xzRings[r][i].x, ys[r], xzRings[r][i].y));
+            }
+
+            // Connect rings
+            for (int r = 0; r < 3; r++)
+            {
+                int rowA = r * 8;
+                int rowB = (r + 1) * 8;
+                for (int i = 0; i < 8; i++)
+                {
+                    int ni = (i + 1) % 8;
+                    tris.Add(rowA + i); tris.Add(rowB + i); tris.Add(rowB + ni);
+                    tris.Add(rowA + i); tris.Add(rowB + ni); tris.Add(rowA + ni);
+                }
+            }
+
+            // Top cap (ring 3) & Bottom cap (ring 0)
+            int topCenter = verts.Count; verts.Add(new Vector3(0f, h, 0f));
+            int botCenter = verts.Count; verts.Add(new Vector3(0f, -h, 0f));
+            for (int i = 0; i < 8; i++)
+            {
+                int ni = (i + 1) % 8;
+                tris.Add(topCenter); tris.Add(24 + ni); tris.Add(24 + i);
+                tris.Add(botCenter); tris.Add(i); tris.Add(ni);
+            }
+
+            _beveledBoxMesh = new Mesh { name = "StudioBeveledBoxMesh" };
+            _beveledBoxMesh.SetVertices(verts);
+            _beveledBoxMesh.SetTriangles(tris, 0);
+            _beveledBoxMesh.RecalculateNormals();
+            _beveledBoxMesh.RecalculateBounds();
+            return _beveledBoxMesh;
+        }
+
         private static GameObject CreateWallBlock(Transform parent, string name, Vector3 localPos, Vector3 localScale, Material mat, Color col)
         {
-            var b = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            b.name = name;
+            var b = new GameObject(name);
             b.transform.SetParent(parent, false);
             b.transform.localPosition = localPos;
             b.transform.localScale = localScale;
-            DestroyCollider(b);
+            var mf = b.AddComponent<MeshFilter>();
+            mf.sharedMesh = GetOrCreateBeveledBoxMesh();
+            b.AddComponent<MeshRenderer>();
             LevelLoader.ApplyMaterialOrColor(b, mat, col);
+            var mr = b.GetComponent<MeshRenderer>();
+            if (mr != null && mr.sharedMaterial != null && mat == null)
+            {
+                if (mr.sharedMaterial.HasProperty("_Smoothness"))
+                    mr.sharedMaterial.SetFloat("_Smoothness", 0.76f);
+            }
             return b;
         }
 
@@ -3061,13 +3824,14 @@ namespace Jelly
             if (mainCamera == null) return;
 
             EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out _, out Vector3 roadRight);
-            EvaluateRoadCurve(CurrentDistance + 10.5f, out Vector3 lookAheadPt, out _, out _);
+            EvaluateRoadCurve(CurrentDistance + 9.6f, out Vector3 lookAheadPt, out _, out _);
 
             float elev = _deckBaseY + _airborneY * 0.45f;
             Vector3 horizForward = new Vector3(lookAheadPt.x - roadCenter.x, 0f, lookAheadPt.z - roadCenter.z).normalized;
-            Vector3 camPos = roadCenter - horizForward * 6.5f + Vector3.up * (4.4f + elev) + roadRight * (CurrentLateralOffset * 0.20f);
+            Vector3 camPos = roadCenter - horizForward * 5.9f + Vector3.up * (5.45f + elev) + roadRight * (CurrentLateralOffset * 0.24f);
             mainCamera.transform.position = camPos;
-            mainCamera.transform.rotation = Quaternion.LookRotation((lookAheadPt + Vector3.up * (elev - 0.25f)) - camPos, Vector3.up);
+            mainCamera.transform.rotation = Quaternion.LookRotation((lookAheadPt + Vector3.up * (elev - 0.30f)) - camPos, Vector3.up);
+            mainCamera.fieldOfView = 49f;
         }
 
         private void UpdateCameraSmooth(float dt)
@@ -3075,746 +3839,26 @@ namespace Jelly
             if (mainCamera == null) return;
 
             EvaluateRoadCurve(CurrentDistance, out Vector3 roadCenter, out _, out Vector3 roadRight);
-            EvaluateRoadCurve(CurrentDistance + 10.5f, out Vector3 lookAheadPt, out _, out _);
+            EvaluateRoadCurve(CurrentDistance + 9.6f, out Vector3 lookAheadPt, out _, out _);
 
             float elev = _deckBaseY + _airborneY * 0.45f;
             Vector3 horizForward = new Vector3(lookAheadPt.x - roadCenter.x, 0f, lookAheadPt.z - roadCenter.z).normalized;
-            Vector3 desiredPos = roadCenter - horizForward * 6.5f + Vector3.up * (4.4f + elev) + roadRight * (CurrentLateralOffset * 0.20f);
-            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, desiredPos, Mathf.Clamp01(dt * 8f));
+            Vector3 desiredPos = roadCenter - horizForward * 5.9f + Vector3.up * (5.45f + elev) + roadRight * (CurrentLateralOffset * 0.24f);
 
-            Quaternion desiredRot = Quaternion.LookRotation((lookAheadPt + Vector3.up * (elev - 0.25f)) - mainCamera.transform.position, Vector3.up);
-            mainCamera.transform.rotation = Quaternion.Slerp(mainCamera.transform.rotation, desiredRot, Mathf.Clamp01(dt * 8f));
-        }
-
-        private void EnsureFlatTex()
-        {
-            if (_flatTex == null)
+            if (_cameraShakeTimer > 0f)
             {
-                _flatTex = new Texture2D(1, 1);
-                _flatTex.SetPixel(0, 0, Color.white);
-                _flatTex.Apply();
-            }
-        }
-
-        private void DrawRect(Rect r, Color col)
-        {
-            Color prev = GUI.color;
-            GUI.color = col;
-            GUI.DrawTexture(r, _flatTex);
-            GUI.color = prev;
-        }
-
-        private void DrawCard(Rect r, Color bgCol, Color borderCol, float border = 2.5f)
-        {
-            DrawRect(new Rect(r.x - border, r.y - border, r.width + border * 2f, r.height + border * 2f), borderCol);
-            DrawRect(r, bgCol);
-        }
-
-        private void OnGUI()
-        {
-            EnsureFlatTex();
-
-            Rect safe = Screen.safeArea;
-            float safeLeft = safe.xMin;
-            float safeTop = Screen.height - safe.yMax;
-            float safeBottom = safe.yMin;
-            float safeWidth = safe.width;
-            float s = Mathf.Clamp(safeWidth / 640f, 0.82f, 2.20f);
-
-            GUIStyle badgeStyle = new GUIStyle(GUI.skin.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = Mathf.RoundToInt(15f * s),
-                fontStyle = FontStyle.Bold
-            };
-
-            GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = Mathf.RoundToInt(22f * s),
-                fontStyle = FontStyle.Bold
-            };
-            titleStyle.normal.textColor = Color.white;
-
-            GUIStyle subStyle = new GUIStyle(GUI.skin.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = Mathf.RoundToInt(14f * s),
-                fontStyle = FontStyle.Bold
-            };
-            subStyle.normal.textColor = new Color(0.88f, 0.94f, 1.00f);
-
-            // 1. 3D World-Space Floating Badges when Playing
-            if (mainCamera != null && CurrentScreen == JellyScreenMode.Playing && !IsGameOver && !IsLevelCompleted)
-            {
-                for (int i = 0; i < _activeObstacles.Count; i++)
-                {
-                    var obs = _activeObstacles[i];
-                    if (obs == null || obs.resolved) continue;
-                    float dist = obs.trackZ - CurrentDistance;
-                    if (dist < -1f || dist > 34f) continue;
-                    DrawWorldSpaceBadge(obs.transform.position + Vector3.up * 2.95f, obs.GetGateHeaderText(), obs.GetGateHeaderColor(), s, badgeStyle);
-                }
-
-                for (int i = 0; i < _activeSegmentNodes.Count; i++)
-                {
-                    var node = _activeSegmentNodes[i];
-                    if (node == null) continue;
-                    float refZ = node.zStart + 3f;
-                    if (node.moduleType == TrackSegmentModuleType.LevelFinaleMultiplier) refZ = node.wallZ;
-                    float dist = refZ - CurrentDistance;
-                    if (dist < -1f || dist > 34f) continue;
-
-                    EvaluateRoadCurve(refZ, out Vector3 wPos, out _, out _);
-                    switch (node.moduleType)
-                    {
-                        case TrackSegmentModuleType.SplitTwinBridge:
-                            DrawWorldSpaceBadge(wPos + Vector3.up * 2.4f, "🛣 ÇATAL İKİZ KÖPRÜ (÷2 Bölün)", new Color(0.80f, 0.42f, 1.00f), s, badgeStyle);
-                            break;
-                        case TrackSegmentModuleType.JumpRampOverAbyss:
-                            DrawWorldSpaceBadge(wPos + Vector3.up * 2.8f, "🚀 KÖPRÜ / RAMPA & HAVA HALKASI", new Color(1.00f, 0.80f, 0.18f), s, badgeStyle);
-                            break;
-                        case TrackSegmentModuleType.DoubleDeckerOverpass:
-                            DrawWorldSpaceBadge(wPos + Vector3.up * 3.8f, "🎢 2 KATLI ÜST GEÇİT (Dev Jöle Camı Kırar!)", new Color(0.22f, 0.92f, 0.65f), s, badgeStyle);
-                            break;
-                        case TrackSegmentModuleType.LaserSlicerGate:
-                            string lTxt = node.laserKind == LaserGateKind.BlueVerticalAutoSplitter ? "✂ MAVİ LAZER (Otomatik ÷2 Böler)" : "✂ KIRMIZI LAZER (Kütleyi 70'e İndirir)";
-                            DrawWorldSpaceBadge(wPos + Vector3.up * 2.9f, lTxt, new Color(0.25f, 0.88f, 1.00f), s, badgeStyle);
-                            break;
-                        case TrackSegmentModuleType.ColorMatchSection:
-                            DrawWorldSpaceBadge(wPos + Vector3.up * 2.8f, $"🎨 HEDEF RENK: {DyeColorNames[node.requiredColorIndex]}", DyeColors[node.requiredColorIndex], s, badgeStyle);
-                            break;
-                        case TrackSegmentModuleType.LevelFinaleMultiplier:
-                            if (!node.wallResolved)
-                                DrawWorldSpaceBadge(wPos + Vector3.up * 2.65f, $"🏁 FİNAL x{node.multiplierValue} (Kütle ≥ {node.requiredMassToBreak:F0})", new Color(1.00f, 0.84f, 0.22f), s, badgeStyle);
-                            break;
-                    }
-                }
-
-                for (int i = 0; i < _activePickups.Count; i++)
-                {
-                    var p = _activePickups[i];
-                    if (p == null || p.IsConsumed || !p.gameObject.activeInHierarchy) continue;
-                    float dist = p.trackZ - CurrentDistance;
-                    if (dist < 0f || dist > 20f) continue;
-
-                    Vector3 sp = mainCamera.WorldToScreenPoint(p.transform.position + Vector3.up * 1.02f);
-                    if (sp.z > 0.5f)
-                    {
-                        float guiY = Screen.height - sp.y;
-                        string txt = p.GetShortBadgeText();
-                        float bw = 114f * s;
-                        float bh = 26f * s;
-                        Rect br = new Rect(sp.x - bw * 0.5f, guiY - bh * 0.5f, bw, bh);
-                        DrawRect(br, new Color(0.08f, 0.06f, 0.20f, 0.88f));
-                        badgeStyle.normal.textColor = p.GetBadgeColor();
-                        GUI.Label(br, txt, badgeStyle);
-                    }
-                }
+                _cameraShakeTimer = Mathf.Max(0f, _cameraShakeTimer - dt);
+                desiredPos += Random.insideUnitSphere * (_cameraShakeAmp * (_cameraShakeTimer / 0.24f));
             }
 
-            // =====================================================================
-            // FAZ 3 — SADELEŞTİRİLMİŞ MOBİL HUD & BAĞLAMSAL AKSİYON DÜĞMESİ
-            // Oyun sırasında: Mesafe, Yetenek İkonlu Kütle Göstergesi ve Tek Bağlamsal Düğme.
-            // Diğer bilgiler (Kombo, Powerup, Uyarı) yalnızca gerektiğinde görünür.
-            // =====================================================================
-            float hudTopY = safeTop + 14f * s;
-            bool anyPowerupActive = HasShield || MagnetTimer > 0f || SlowTimeTimer > 0f;
-            MobileHUDViewModel hudVM = Phase3MobileHUDSystem.BuildViewModel(
-                CurrentMass, IsSplit, CurrentDistance, ComboCount, StatusBannerTimer, anyPowerupActive);
+            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, desiredPos, Mathf.Clamp01(dt * 8.5f));
 
-            // Top-Left: Round Purple Pause Button "||" + Clean Distance Badge "142 m"
-            Rect pauseBtn = new Rect(safeLeft + 16f * s, hudTopY, 52f * s, 52f * s);
-            DrawCard(pauseBtn, new Color(0.32f, 0.20f, 0.62f, 0.94f), new Color(0.68f, 0.48f, 1.00f, 0.85f), 2f * s);
-            titleStyle.normal.textColor = Color.white;
-            if (GUI.Button(pauseBtn, "||", titleStyle))
-            {
-                CurrentScreen = CurrentScreen == JellyScreenMode.Paused ? JellyScreenMode.Playing : JellyScreenMode.Paused;
-            }
+            Quaternion desiredRot = Quaternion.LookRotation((lookAheadPt + Vector3.up * (elev - 0.30f)) - mainCamera.transform.position, Vector3.up);
+            mainCamera.transform.rotation = Quaternion.Slerp(mainCamera.transform.rotation, desiredRot, Mathf.Clamp01(dt * 8.5f));
 
-            Rect distBadge = new Rect(safeLeft + 76f * s, hudTopY + 4f * s, 96f * s, 44f * s);
-            DrawCard(distBadge, new Color(0.10f, 0.08f, 0.24f, 0.88f), new Color(0.38f, 0.68f, 1.00f, 0.70f), 1.5f * s);
-            subStyle.normal.textColor = new Color(0.75f, 0.88f, 1.00f);
-            GUI.Label(new Rect(distBadge.x, distBadge.y + 2f * s, distBadge.width, 16f * s), "MESAFE", subStyle);
-            badgeStyle.normal.textColor = Color.white;
-            GUI.Label(new Rect(distBadge.x, distBadge.y + 18f * s, distBadge.width, 22f * s), $"{hudVM.DistanceMeters} m", badgeStyle);
-
-            // Top-Center: Smart Mass Card + 3 Capability Icons ([◯ ≤75]  [÷2]  [💎 ≥115])
-            float massCardW = 224f * s;
-            float massCardH = 98f * s;
-            Rect massCard = new Rect(safeLeft + (safeWidth - massCardW) * 0.5f, hudTopY, massCardW, massCardH);
-            DrawCard(massCard, new Color(0.10f, 0.08f, 0.24f, 0.94f), new Color(0.45f, 0.36f, 0.82f, 0.85f), 2f * s);
-
-            subStyle.normal.textColor = new Color(0.78f, 0.86f, 1.00f);
-            string massTopTitle = IsSplit ? $"KÜTLE ({hudVM.EffectivePieceMass:F0}x2)" : "KÜTLE";
-            GUI.Label(new Rect(massCard.x, massCard.y + 3f * s, massCard.width, 18f * s), massTopTitle, subStyle);
-
-            titleStyle.normal.textColor = hudVM.IsCrystalSmashIconLit
-                ? new Color(0.22f, 1.00f, 0.56f)
-                : (hudVM.IsSmallGateIconLit ? new Color(0.32f, 0.94f, 1.00f) : Color.white);
-            GUI.Label(new Rect(massCard.x, massCard.y + 19f * s, massCard.width, 28f * s), $"{CurrentMass:F0}", titleStyle);
-
-            // Mass Fill Bar (or Twin Mini Bars when Split)
-            Color gaugeCol = hudVM.IsCrystalSmashIconLit
-                ? new Color(0.18f, 0.96f, 0.50f)
-                : (hudVM.IsSmallGateIconLit ? new Color(0.24f, 0.88f, 1.00f) : new Color(0.48f, 0.68f, 1.00f));
-            if (!IsSplit)
-            {
-                Rect mBarBg = new Rect(massCard.x + 14f * s, massCard.y + 49f * s, massCard.width - 28f * s, 9f * s);
-                DrawRect(mBarBg, new Color(0.22f, 0.18f, 0.42f));
-                DrawRect(new Rect(mBarBg.x, mBarBg.y, mBarBg.width * Mathf.Clamp01(CurrentMass / 160f), mBarBg.height), gaugeCol);
-            }
-            else
-            {
-                float halfW = (massCard.width - 36f * s) * 0.5f;
-                float halfFill = Mathf.Clamp01((CurrentMass * 0.5f) / 90f);
-                Rect mBarL = new Rect(massCard.x + 12f * s, massCard.y + 49f * s, halfW, 9f * s);
-                Rect mBarR = new Rect(massCard.x + 24f * s + halfW, massCard.y + 49f * s, halfW, 9f * s);
-                DrawRect(mBarL, new Color(0.22f, 0.18f, 0.42f));
-                DrawRect(new Rect(mBarL.x, mBarL.y, mBarL.width * halfFill, mBarL.height), new Color(0.82f, 0.38f, 1.00f));
-                DrawRect(mBarR, new Color(0.22f, 0.18f, 0.42f));
-                DrawRect(new Rect(mBarR.x, mBarR.y, mBarR.width * halfFill, mBarR.height), new Color(0.82f, 0.38f, 1.00f));
-            }
-
-            // 3 Capability Indicator Pills inside Mass Card:
-            // 1) [◯ ≤75 Dar Geçit]   2) [÷2 Normal]   3) [💎 ≥115 Kristal Kır]
-            float capW = (massCard.width - 28f * s) / 3f;
-            float capY = massCard.y + 64f * s;
-            float capH = 26f * s;
-
-            Rect capSmallRect = new Rect(massCard.x + 8f * s, capY, capW, capH);
-            DrawCard(capSmallRect,
-                hudVM.IsSmallGateIconLit ? new Color(0.12f, 0.68f, 0.88f, 0.98f) : new Color(0.16f, 0.14f, 0.32f, 0.65f),
-                hudVM.IsSmallGateIconLit ? new Color(0.45f, 0.98f, 1.00f, 1.00f) : new Color(0.32f, 0.28f, 0.52f, 0.45f), 1.5f * s);
-            subStyle.normal.textColor = hudVM.IsSmallGateIconLit ? Color.white : new Color(0.55f, 0.60f, 0.75f);
-            GUI.Label(capSmallRect, "◯ ≤75", subStyle);
-
-            Rect capNormRect = new Rect(massCard.x + 14f * s + capW, capY, capW, capH);
-            DrawCard(capNormRect,
-                hudVM.IsNormalSplitIconLit ? new Color(0.56f, 0.24f, 0.92f, 0.98f) : new Color(0.16f, 0.14f, 0.32f, 0.65f),
-                hudVM.IsNormalSplitIconLit ? new Color(0.88f, 0.58f, 1.00f, 1.00f) : new Color(0.32f, 0.28f, 0.52f, 0.45f), 1.5f * s);
-            subStyle.normal.textColor = hudVM.IsNormalSplitIconLit ? Color.white : new Color(0.55f, 0.60f, 0.75f);
-            GUI.Label(capNormRect, "÷2 DENGE", subStyle);
-
-            Rect capSmashRect = new Rect(massCard.x + 20f * s + capW * 2f, capY, capW, capH);
-            DrawCard(capSmashRect,
-                hudVM.IsCrystalSmashIconLit ? new Color(0.14f, 0.78f, 0.44f, 0.98f) : new Color(0.16f, 0.14f, 0.32f, 0.65f),
-                hudVM.IsCrystalSmashIconLit ? new Color(0.48f, 1.00f, 0.68f, 1.00f) : new Color(0.32f, 0.28f, 0.52f, 0.45f), 1.5f * s);
-            subStyle.normal.textColor = hudVM.IsCrystalSmashIconLit ? Color.white : new Color(0.55f, 0.60f, 0.75f);
-            GUI.Label(capSmashRect, "💎 ≥115", subStyle);
-
-            // Top-Right: Compact Menu Button "🏠" (Score & HighScore are shown on End-of-Run summary, keeping gameplay screen clean!)
-            Rect menuQuickBtn = new Rect(safeLeft + safeWidth - 68f * s, hudTopY, 52f * s, 52f * s);
-            DrawCard(menuQuickBtn, new Color(0.24f, 0.16f, 0.48f, 0.92f), new Color(0.55f, 0.38f, 0.92f, 0.75f), 2f * s);
-            titleStyle.normal.textColor = Color.white;
-            if (GUI.Button(menuQuickBtn, "🏠", titleStyle))
-            {
-                CurrentScreen = CurrentScreen == JellyScreenMode.MainMenu ? JellyScreenMode.Playing : JellyScreenMode.MainMenu;
-            }
-
-            // Quick Sequential Object Test Level Bar: [ ◀ Önceki ]   LVL X/15: OBJE ADI   [ Sonraki ▶ ]
-            float lvlBarW = Mathf.Min(safeWidth - 16f * s, 480f * s);
-            float lvlBarH = 32f * s;
-            float lvlBarX = safeLeft + (safeWidth - lvlBarW) * 0.5f;
-            float lvlBarY = hudTopY + massCardH + 6f * s;
-
-            Rect prevLvlBtn = new Rect(lvlBarX, lvlBarY, 56f * s, lvlBarH);
-            DrawCard(prevLvlBtn, new Color(0.24f, 0.18f, 0.52f, 0.94f), new Color(0.58f, 0.44f, 0.96f, 0.85f), 1.5f * s);
-            badgeStyle.normal.textColor = Color.white;
-            if (GUI.Button(prevLvlBtn, "◀ LVL", badgeStyle))
-            {
-                CurrentScreen = JellyScreenMode.Playing;
-                LoadPreviousProgressiveLevel();
-            }
-
-            Rect nextLvlBtn = new Rect(lvlBarX + lvlBarW - 56f * s, lvlBarY, 56f * s, lvlBarH);
-            DrawCard(nextLvlBtn, new Color(0.14f, 0.62f, 0.86f, 0.94f), new Color(0.45f, 0.94f, 1.00f, 0.90f), 1.5f * s);
-            badgeStyle.normal.textColor = Color.white;
-            if (GUI.Button(nextLvlBtn, "LVL ▶", badgeStyle))
-            {
-                CurrentScreen = JellyScreenMode.Playing;
-                LoadNextProgressiveLevel();
-            }
-
-            Rect lvlTitleRect = new Rect(lvlBarX + 60f * s, lvlBarY, lvlBarW - 120f * s, lvlBarH);
-            DrawCard(lvlTitleRect, new Color(0.10f, 0.08f, 0.24f, 0.92f), new Color(0.42f, 0.68f, 1.00f, 0.72f), 1.5f * s);
-            subStyle.normal.textColor = new Color(1.00f, 0.92f, 0.36f);
-            string curTitle = _currentBlueprint != null ? _currentBlueprint.LevelTitle : $"LVL {CurrentLevelNumber}";
-            GUI.Label(lvlTitleRect, curTitle, subStyle);
-
-            // Conditional HUD Elements: ONLY visible when triggered!
-            if (CurrentScreen == JellyScreenMode.Playing && !IsGameOver && !IsLevelCompleted)
-            {
-                if (hudVM.ShowComboBadge)
-                {
-                    Rect multPill = new Rect(safeLeft + (safeWidth - 112f * s) * 0.5f, lvlBarY + lvlBarH + 4f * s, 112f * s, 28f * s);
-                    DrawCard(multPill, new Color(0.42f, 0.18f, 0.76f, 0.95f), new Color(0.88f, 0.48f, 1.00f, 0.90f), 1.5f * s);
-                    badgeStyle.normal.textColor = new Color(1.00f, 0.90f, 0.32f);
-                    GUI.Label(multPill, $"🔥 x{hudVM.LiveComboMultiplier} KOMBO", badgeStyle);
-                }
-
-                if (hudVM.ShowPowerupPill)
-                {
-                    string powerupLine = "";
-                    if (HasShield) powerupLine += "🛡 KALKAN   ";
-                    if (MagnetTimer > 0f) powerupLine += $"🧲 MIKNATIS ({MagnetTimer:F1}s)   ";
-                    if (SlowTimeTimer > 0f) powerupLine += $"⏳ YAVAŞ ZAMAN ({SlowTimeTimer:F1}s)";
-                    Rect pwRect = new Rect(safeLeft + (safeWidth - 340f * s) * 0.5f, lvlBarY + lvlBarH + 34f * s, 340f * s, 26f * s);
-                    DrawRect(pwRect, new Color(0.22f, 0.12f, 0.44f, 0.88f));
-                    subStyle.normal.textColor = new Color(1.00f, 0.88f, 0.28f);
-                    GUI.Label(pwRect, powerupLine.Trim(), subStyle);
-                }
-
-                // Bottom Ergonomic Control Bar:
-                // [ ◀ ]      [ TEK BAĞLAMSAL BÜYÜK DÜĞME: ÷2 BÖLÜN  <->  >< BİRLEŞ ]      [ ▶ ]
-                float ctrlH = 104f * s;
-                float ctrlY = Screen.height - safeBottom - ctrlH - 12f * s;
-                float ctrlW = Mathf.Min(safeWidth - 20f * s, 500f * s);
-                float ctrlX = safeLeft + (safeWidth - ctrlW) * 0.5f;
-
-                if (hudVM.ShowTransientBanner)
-                {
-                    Rect bannerRect = new Rect(ctrlX, ctrlY - 38f * s, ctrlW, 30f * s);
-                    DrawCard(bannerRect, new Color(0.08f, 0.06f, 0.22f, 0.86f), new Color(0.45f, 0.36f, 0.82f, 0.55f), 1.5f * s);
-                    subStyle.normal.textColor = new Color(1.00f, 0.92f, 0.48f);
-                    GUI.Label(bannerRect, StatusBanner, subStyle);
-                }
-
-                // 1) Left Steer Button "◀"
-                Rect btnLeft = new Rect(ctrlX + 8f * s, ctrlY + 14f * s, 76f * s, 76f * s);
-                DrawCard(btnLeft, new Color(0.22f, 0.28f, 0.58f, 0.92f), new Color(0.42f, 0.72f, 1.00f, 0.85f), 2.5f * s);
-                titleStyle.normal.textColor = Color.white;
-                if (GUI.RepeatButton(btnLeft, "◀", titleStyle))
-                {
-                    _uiSteerHoldDir = -1f;
-                }
-
-                // 2) SINGLE CONTEXTUAL BIG ACTION BUTTON ("÷2 BÖLÜN" when unsplit, ">< BİRLEŞ" when split)
-                float ctxBtnW = 248f * s;
-                Rect btnContextual = new Rect(ctrlX + (ctrlW - ctxBtnW) * 0.5f, ctrlY + 4f * s, ctxBtnW, 92f * s);
-                Color ctxBg;
-                Color ctxBorder;
-                if (hudVM.ActionKind == ContextualActionKind.Merge)
-                {
-                    ctxBg = new Color(0.98f, 0.68f, 0.14f, 0.97f);
-                    ctxBorder = new Color(1.00f, 0.92f, 0.42f, 1.00f);
-                }
-                else if (hudVM.ActionKind == ContextualActionKind.Split)
-                {
-                    ctxBg = new Color(0.68f, 0.24f, 0.98f, 0.97f);
-                    ctxBorder = new Color(0.95f, 0.62f, 1.00f, 1.00f);
-                }
-                else
-                {
-                    ctxBg = new Color(0.28f, 0.22f, 0.42f, 0.78f);
-                    ctxBorder = new Color(0.48f, 0.40f, 0.65f, 0.65f);
-                }
-
-                DrawCard(btnContextual, ctxBg, ctxBorder, 3.2f * s);
-                titleStyle.normal.textColor = hudVM.ActionButtonInteractable ? Color.white : new Color(0.70f, 0.68f, 0.82f);
-                if (GUI.Button(btnContextual, hudVM.ActionButtonLabel, titleStyle))
-                {
-                    if (Phase3MobileHUDSystem.TryExecuteContextualAction(IsSplit, CurrentMass, out bool nextSplit))
-                    {
-                        SetSplitState(nextSplit);
-                    }
-                    else
-                    {
-                        SetBanner("⚠ Bölünmek için en az 40 Kütle gerekir!", 1.8f);
-                    }
-                }
-
-                // 3) Right Steer Button "▶"
-                Rect btnRight = new Rect(ctrlX + ctrlW - 84f * s, ctrlY + 14f * s, 76f * s, 76f * s);
-                DrawCard(btnRight, new Color(0.22f, 0.28f, 0.58f, 0.92f), new Color(0.42f, 0.72f, 1.00f, 0.85f), 2.5f * s);
-                titleStyle.normal.textColor = Color.white;
-                if (GUI.RepeatButton(btnRight, "▶", titleStyle))
-                {
-                    _uiSteerHoldDir = +1f;
-                }
-            }
-
-            // =====================================================================
-            // EKRAN 1: ANA MENÜ (Oyna, Mağaza, Görevler, Ayarlar - Reference Section 6)
-            // =====================================================================
-            if (CurrentScreen == JellyScreenMode.MainMenu)
-            {
-                float mw = Mathf.Min(safeWidth - 28f * s, 460f * s);
-                float mh = 510f * s;
-                Rect box = new Rect(safeLeft + (safeWidth - mw) * 0.5f, (Screen.height - mh) * 0.5f, mw, mh);
-                DrawCard(box, new Color(0.12f, 0.08f, 0.28f, 0.94f), new Color(0.68f, 0.42f, 1.00f, 0.92f), 3.5f * s);
-
-                // PROJECT JELLY Title Header
-                titleStyle.normal.textColor = new Color(0.38f, 0.92f, 1.00f);
-                GUI.Label(new Rect(box.x, box.y + 18f * s, mw, 32f * s), "PROJECT", titleStyle);
-                GUIStyle giantLogo = new GUIStyle(titleStyle) { fontSize = Mathf.RoundToInt(38f * s) };
-                giantLogo.normal.textColor = new Color(0.96f, 0.48f, 1.00f);
-                GUI.Label(new Rect(box.x, box.y + 48f * s, mw, 48f * s), "JELLY", giantLogo);
-
-                subStyle.normal.textColor = new Color(0.82f, 0.90f, 1.00f);
-                GUI.Label(new Rect(box.x + 16f * s, box.y + 100f * s, mw - 32f * s, 26f * s),
-                    "3D Hyper-Casual Endless Morph & Split Runner", subStyle);
-
-                // Biome & Level Preview Card
-                BiomePalette b = GetCurrentBiome();
-                Rect biomeCard = new Rect(box.x + 28f * s, box.y + 142f * s, mw - 56f * s, 96f * s);
-                DrawCard(biomeCard, new Color(0.18f, 0.14f, 0.38f, 0.95f), b.CurbColor, 2f * s);
-                badgeStyle.normal.textColor = b.CurbColor;
-                GUI.Label(new Rect(biomeCard.x, biomeCard.y + 10f * s, biomeCard.width, 28f * s),
-                    $"AKTİF BÖLÜM: SEVİYE {CurrentLevelNumber}", badgeStyle);
-                subStyle.normal.textColor = Color.white;
-                GUI.Label(new Rect(biomeCard.x, biomeCard.y + 40f * s, biomeCard.width, 24f * s),
-                    $"Tema Biyomu: {b.Name}", subStyle);
-                subStyle.normal.textColor = new Color(0.75f, 0.88f, 1.00f);
-                GUI.Label(new Rect(biomeCard.x, biomeCard.y + 64f * s, biomeCard.width, 24f * s),
-                    $"Seçili Jöle: {SkinNames[SelectedSkinIndex]}  •  En İyi: {HighScore:N0}", subStyle);
-
-                // Big Green "Oyna ▶" Button
-                Rect playBtn = new Rect(box.x + (mw - 250f * s) * 0.5f, box.y + 266f * s, 250f * s, 68f * s);
-                DrawCard(playBtn, new Color(0.16f, 0.88f, 0.46f), new Color(0.55f, 1.00f, 0.72f), 3f * s);
-                titleStyle.normal.textColor = Color.white;
-                if (GUI.Button(playBtn, "Oyna  ▶", titleStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Playing;
-                }
-
-                // Bottom 4 Navigation Icon Buttons: [🏆 Seviye]  [🛒 Mağaza]  [📋 Görevler]  [⚙️ Ayarlar]
-                float navY = box.y + 368f * s;
-                float navW = (mw - 68f * s) / 4f;
-                float navH = 68f * s;
-
-                Rect navLvl = new Rect(box.x + 16f * s, navY, navW, navH);
-                DrawCard(navLvl, new Color(0.88f, 0.62f, 0.14f), new Color(1.00f, 0.88f, 0.42f), 2f * s);
-                badgeStyle.normal.textColor = Color.white;
-                if (GUI.Button(navLvl, "🏆\nBölüm+", badgeStyle))
-                {
-                    LoadNextProgressiveLevel();
-                }
-
-                Rect navShop = new Rect(box.x + 28f * s + navW, navY, navW, navH);
-                DrawCard(navShop, new Color(0.64f, 0.24f, 0.94f), new Color(0.90f, 0.55f, 1.00f), 2f * s);
-                if (GUI.Button(navShop, "🛒\nMağaza", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Shop;
-                }
-
-                Rect navQuests = new Rect(box.x + 40f * s + navW * 2f, navY, navW, navH);
-                DrawCard(navQuests, new Color(0.20f, 0.62f, 0.96f), new Color(0.55f, 0.88f, 1.00f), 2f * s);
-                if (GUI.Button(navQuests, "📋\nGörevler", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Quests;
-                }
-
-                Rect navSettings = new Rect(box.x + 52f * s + navW * 3f, navY, navW, navH);
-                DrawCard(navSettings, new Color(0.32f, 0.36f, 0.58f), new Color(0.68f, 0.74f, 0.96f), 2f * s);
-                if (GUI.Button(navSettings, "⚙\nAyarlar", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Settings;
-                }
-
-                subStyle.normal.textColor = new Color(0.76f, 0.84f, 1.00f);
-                GUI.Label(new Rect(box.x, box.y + 454f * s, mw, 36f * s),
-                    "Tek elle oynanabilir ergonomik kontroller & 5 farklı tema biyomu", subStyle);
-                return;
-            }
-
-            // =====================================================================
-            // EKRAN 4: GÖREVLER (Günlük / Kalıcı Hedefler, Ödüller - Reference Section 6)
-            // =====================================================================
-            if (CurrentScreen == JellyScreenMode.Quests)
-            {
-                float mw = Mathf.Min(safeWidth - 28f * s, 460f * s);
-                float mh = 430f * s;
-                Rect box = new Rect(safeLeft + (safeWidth - mw) * 0.5f, (Screen.height - mh) * 0.5f, mw, mh);
-                DrawCard(box, new Color(0.12f, 0.08f, 0.28f, 0.96f), new Color(0.68f, 0.42f, 1.00f, 0.92f), 3f * s);
-
-                titleStyle.normal.textColor = Color.white;
-                GUI.Label(new Rect(box.x, box.y + 16f * s, mw, 34f * s), "Görevler", titleStyle);
-
-                DrawQuestRow(new Rect(box.x + 22f * s, box.y + 68f * s, mw - 44f * s, 78f * s),
-                    "Toplam 10 Split yap", Mathf.Min(10, QuestSplitsCount), 10, "💎 +250", s, badgeStyle, subStyle);
-
-                DrawQuestRow(new Rect(box.x + 22f * s, box.y + 160f * s, mw - 44f * s, 78f * s),
-                    "Kütleyi 150'ye çıkar", Mathf.Min(1, QuestReach150Count), 1, "🟢 +500", s, badgeStyle, subStyle);
-
-                DrawQuestRow(new Rect(box.x + 22f * s, box.y + 252f * s, mw - 44f * s, 78f * s),
-                    "5 kristal duvar kır", Mathf.Min(5, QuestSmashWallsCount), 5, "💎 +500", s, badgeStyle, subStyle);
-
-                Rect backBtn = new Rect(box.x + (mw - 180f * s) * 0.5f, box.y + 352f * s, 180f * s, 52f * s);
-                DrawCard(backBtn, new Color(0.18f, 0.86f, 0.48f), new Color(0.58f, 1.00f, 0.74f), 2f * s);
-                badgeStyle.normal.textColor = Color.white;
-                if (GUI.Button(backBtn, "Oyuna Dön ▶", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Playing;
-                }
-                return;
-            }
-
-            // =====================================================================
-            // EKRAN 5: MAĞAZA & ÖZELLEŞTİRME (Jöleler, İzler, Efektler - Reference Section 6)
-            // =====================================================================
-            if (CurrentScreen == JellyScreenMode.Shop)
-            {
-                float mw = Mathf.Min(safeWidth - 28f * s, 460f * s);
-                float mh = 460f * s;
-                Rect box = new Rect(safeLeft + (safeWidth - mw) * 0.5f, (Screen.height - mh) * 0.5f, mw, mh);
-                DrawCard(box, new Color(0.12f, 0.08f, 0.28f, 0.96f), new Color(0.75f, 0.42f, 1.00f, 0.92f), 3f * s);
-
-                titleStyle.normal.textColor = Color.white;
-                GUI.Label(new Rect(box.x, box.y + 14f * s, mw, 32f * s), "Mağaza & Özelleştirme", titleStyle);
-
-                // 3 Tabs: [Jöleler]  [İzler]  [Efektler]
-                string[] tabs = { "Jöleler", "İzler", "Efektler" };
-                float tabW = (mw - 52f * s) / 3f;
-                for (int t = 0; t < 3; t++)
-                {
-                    Rect tr = new Rect(box.x + 18f * s + t * (tabW + 8f * s), box.y + 56f * s, tabW, 38f * s);
-                    bool active = ShopActiveTab == t;
-                    DrawCard(tr, active ? new Color(0.64f, 0.24f, 0.96f) : new Color(0.22f, 0.16f, 0.42f),
-                        active ? new Color(0.95f, 0.65f, 1.00f) : new Color(0.42f, 0.32f, 0.68f), 1.5f * s);
-                    badgeStyle.normal.textColor = Color.white;
-                    if (GUI.Button(tr, tabs[t], badgeStyle)) ShopActiveTab = t;
-                }
-
-                // 3x2 Grid of 6 items
-                float cellW = (mw - 64f * s) / 3f;
-                float cellH = 122f * s;
-                for (int i = 0; i < 6; i++)
-                {
-                    int row = i / 3;
-                    int col = i % 3;
-                    Rect cell = new Rect(box.x + 20f * s + col * (cellW + 12f * s), box.y + 110f * s + row * (cellH + 14f * s), cellW, cellH);
-
-                    bool isEquipped = (ShopActiveTab == 0 && SelectedSkinIndex == i) ||
-                                      (ShopActiveTab == 1 && SelectedTrailIndex == i) ||
-                                      (ShopActiveTab == 2 && SelectedEffectIndex == i);
-
-                    DrawCard(cell, isEquipped ? new Color(0.24f, 0.46f, 0.36f) : new Color(0.20f, 0.14f, 0.38f),
-                        isEquipped ? new Color(0.28f, 0.98f, 0.56f) : new Color(0.48f, 0.36f, 0.78f), 2f * s);
-
-                    // Colored Jelly Preview Swatch inside the card
-                    Rect swatch = new Rect(cell.x + (cellW - 48f * s) * 0.5f, cell.y + 12f * s, 48f * s, 48f * s);
-                    DrawCard(swatch, SkinPaletteColors[i], Color.white, 1.5f * s);
-
-                    string itemName = ShopActiveTab == 0 ? SkinNames[i] : (ShopActiveTab == 1 ? TrailNames[i] : EffectNames[i]);
-                    subStyle.normal.textColor = Color.white;
-                    GUI.Label(new Rect(cell.x + 4f * s, cell.y + 64f * s, cellW - 8f * s, 24f * s), itemName, subStyle);
-
-                    badgeStyle.normal.textColor = isEquipped ? new Color(0.35f, 1.00f, 0.62f) : new Color(0.88f, 0.78f, 1.00f);
-                    if (GUI.Button(cell, "", GUIStyle.none))
-                    {
-                        if (ShopActiveTab == 0) { SelectedSkinIndex = i; PlayerPrefs.SetInt("JellySkinIdx", i); }
-                        else if (ShopActiveTab == 1) { SelectedTrailIndex = i; PlayerPrefs.SetInt("JellyTrailIdx", i); }
-                        else { SelectedEffectIndex = i; PlayerPrefs.SetInt("JellyEffectIdx", i); }
-                        SyncJellyVisualsAndPosition(0f);
-                    }
-                    GUI.Label(new Rect(cell.x, cell.y + 90f * s, cellW, 24f * s), isEquipped ? "✓ Seçili" : "Seç", badgeStyle);
-                }
-
-                Rect backBtn = new Rect(box.x + (mw - 180f * s) * 0.5f, box.y + 392f * s, 180f * s, 50f * s);
-                DrawCard(backBtn, new Color(0.18f, 0.86f, 0.48f), new Color(0.58f, 1.00f, 0.74f), 2f * s);
-                badgeStyle.normal.textColor = Color.white;
-                if (GUI.Button(backBtn, "Oyuna Dön ▶", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Playing;
-                }
-                return;
-            }
-
-            // =====================================================================
-            // EKRAN 6: AYARLAR & DURAKLATMA (Ses, Müzik, Titreşim, Grafik - Reference Section 6)
-            // =====================================================================
-            if (CurrentScreen == JellyScreenMode.Settings || CurrentScreen == JellyScreenMode.Paused)
-            {
-                float mw = Mathf.Min(safeWidth - 28f * s, 450f * s);
-                float mh = 430f * s;
-                Rect box = new Rect(safeLeft + (safeWidth - mw) * 0.5f, (Screen.height - mh) * 0.5f, mw, mh);
-                DrawCard(box, new Color(0.12f, 0.08f, 0.28f, 0.96f), new Color(0.68f, 0.42f, 1.00f, 0.92f), 3f * s);
-
-                titleStyle.normal.textColor = Color.white;
-                GUI.Label(new Rect(box.x, box.y + 16f * s, mw, 34f * s),
-                    CurrentScreen == JellyScreenMode.Paused ? "Oyun Duraklatıldı / Ayarlar" : "Ayarlar", titleStyle);
-
-                SoundEnabled = DrawSettingToggleRow(new Rect(box.x + 24f * s, box.y + 66f * s, mw - 48f * s, 52f * s), "🔊  Ses Efektleri", SoundEnabled, s, badgeStyle);
-                MusicEnabled = DrawSettingToggleRow(new Rect(box.x + 24f * s, box.y + 128f * s, mw - 48f * s, 52f * s), "🎵  Müzik", MusicEnabled, s, badgeStyle);
-                VibrationEnabled = DrawSettingToggleRow(new Rect(box.x + 24f * s, box.y + 190f * s, mw - 48f * s, 52f * s), "📳  Titreşim", VibrationEnabled, s, badgeStyle);
-                ColorblindMode = DrawSettingToggleRow(new Rect(box.x + 24f * s, box.y + 252f * s, mw - 48f * s, 52f * s), "👁  Renk Körü Modu", ColorblindMode, s, badgeStyle);
-
-                // Faz 5: 3 Görsel Konsept Seçici ("Renkli Arcade / Premium Minimalist / Futuristik Neon")
-                Rect qRow = new Rect(box.x + 24f * s, box.y + 314f * s, mw - 48f * s, 48f * s);
-                DrawCard(qRow, new Color(0.20f, 0.14f, 0.38f), new Color(0.45f, 0.35f, 0.75f), 1.5f * s);
-                badgeStyle.normal.textColor = Color.white;
-                GUI.Label(new Rect(qRow.x + 12f * s, qRow.y, qRow.width * 0.48f, qRow.height), "Görsel Konsept", badgeStyle);
-                string[] conceptNames = { "Renkli Arcade ▾", "Minimalist ▾", "Futuristik Neon ▾" };
-                Rect qBtn = new Rect(qRow.x + qRow.width - 156f * s, qRow.y + 6f * s, 144f * s, 36f * s);
-                DrawCard(qBtn, new Color(0.48f, 0.24f, 0.82f), new Color(0.78f, 0.52f, 1.00f), 1.5f * s);
-                if (GUI.Button(qBtn, conceptNames[VisualConceptIndex % 3], badgeStyle))
-                {
-                    VisualConceptIndex = (VisualConceptIndex + 1) % 3;
-                    StartLevel(CurrentLevelNumber);
-                }
-
-                Rect resumeBtn = new Rect(box.x + 28f * s, box.y + 372f * s, (mw - 72f * s) * 0.5f, 46f * s);
-                DrawCard(resumeBtn, new Color(0.18f, 0.86f, 0.48f), new Color(0.58f, 1.00f, 0.74f), 2f * s);
-                if (GUI.Button(resumeBtn, "Devam Et ▶", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.Playing;
-                }
-
-                Rect homeBtn = new Rect(box.x + 44f * s + (mw - 72f * s) * 0.5f, box.y + 372f * s, (mw - 72f * s) * 0.5f, 46f * s);
-                DrawCard(homeBtn, new Color(0.56f, 0.24f, 0.88f), new Color(0.85f, 0.55f, 1.00f), 2f * s);
-                if (GUI.Button(homeBtn, "🏠 Ana Menü", badgeStyle))
-                {
-                    CurrentScreen = JellyScreenMode.MainMenu;
-                }
-                return;
-            }
-
-            // =====================================================================
-            // EKRAN 3: OYUN SONU ÖZETİ (Skor, Rekor, Görev İlerlemesi ve Yeniden Oynama)
-            // =====================================================================
-            if (IsLevelCompleted || IsGameOver)
-            {
-                float mw = Mathf.Min(safeWidth - 28f * s, 450f * s);
-                float mh = 438f * s;
-                Rect box = new Rect(safeLeft + (safeWidth - mw) * 0.5f, (Screen.height - mh) * 0.5f, mw, mh);
-
-                Color borderC = IsLevelCompleted ? new Color(0.28f, 0.98f, 0.58f) : new Color(0.98f, 0.36f, 0.68f);
-                DrawCard(box, new Color(0.12f, 0.08f, 0.28f, 0.97f), borderC, 3.5f * s);
-
-                titleStyle.normal.textColor = borderC;
-                GUI.Label(new Rect(box.x, box.y + 14f * s, mw, 34f * s),
-                    IsLevelCompleted ? $"Seviye {CurrentLevelNumber} Tamamlandı!" : "Oyun Bitti!", titleStyle);
-
-                // 1) Score & HighScore Summary Row
-                Rect scoreCard = new Rect(box.x + 28f * s, box.y + 56f * s, mw - 56f * s, 78f * s);
-                DrawCard(scoreCard, new Color(0.18f, 0.12f, 0.38f, 0.95f), new Color(0.48f, 0.36f, 0.82f, 0.80f), 2f * s);
-
-                float halfCol = scoreCard.width * 0.5f;
-                subStyle.normal.textColor = new Color(0.78f, 0.86f, 1.00f);
-                GUI.Label(new Rect(scoreCard.x, scoreCard.y + 8f * s, halfCol, 20f * s), "Puan", subStyle);
-                titleStyle.normal.textColor = Color.white;
-                GUI.Label(new Rect(scoreCard.x, scoreCard.y + 30f * s, halfCol, 34f * s), $"{Score:N0}", titleStyle);
-
-                GUI.Label(new Rect(scoreCard.x + halfCol, scoreCard.y + 8f * s, halfCol, 20f * s), "En İyi Rekor", subStyle);
-                badgeStyle.normal.textColor = new Color(1.00f, 0.86f, 0.28f);
-                GUI.Label(new Rect(scoreCard.x + halfCol, scoreCard.y + 32f * s, halfCol, 30f * s), $"{HighScore:N0}", badgeStyle);
-
-                // 2) Compact Quest Progress Summary (Görev İlerlemesi)
-                Rect questCard = new Rect(box.x + 28f * s, box.y + 146f * s, mw - 56f * s, 146f * s);
-                DrawCard(questCard, new Color(0.16f, 0.11f, 0.34f, 0.95f), new Color(0.42f, 0.56f, 0.94f, 0.70f), 1.5f * s);
-                subStyle.normal.textColor = new Color(0.78f, 0.90f, 1.00f);
-                GUI.Label(new Rect(questCard.x, questCard.y + 6f * s, questCard.width, 20f * s), "GÖREV İLERLEMESİ", subStyle);
-
-                DrawCompactQuestBar(new Rect(questCard.x + 12f * s, questCard.y + 30f * s, questCard.width - 24f * s, 32f * s),
-                    "10 Bölünme (÷2)", Mathf.Min(10, QuestSplitsCount), 10, s, subStyle);
-                DrawCompactQuestBar(new Rect(questCard.x + 12f * s, questCard.y + 68f * s, questCard.width - 24f * s, 32f * s),
-                    "150 Kütle Hedefi", Mathf.Min(1, QuestReach150Count), 1, s, subStyle);
-                DrawCompactQuestBar(new Rect(questCard.x + 12f * s, questCard.y + 106f * s, questCard.width - 24f * s, 32f * s),
-                    "5 Kristal Duvar Kır", Mathf.Min(5, QuestSmashWallsCount), 5, s, subStyle);
-
-                // 3) Action Row: Green "Tekrar Oyna ↻" (or "Sonraki Seviye ▶") + Purple Home "🏠"
-                Rect mainActBtn = new Rect(box.x + 28f * s, box.y + 306f * s, mw - 124f * s, 54f * s);
-                DrawCard(mainActBtn, new Color(0.16f, 0.88f, 0.48f), new Color(0.55f, 1.00f, 0.72f), 2.5f * s);
-                badgeStyle.normal.textColor = Color.white;
-                string actTxt = IsLevelCompleted ? $"Sonraki Seviye ({CurrentLevelNumber + 1}) ▶" : "Tekrar Oyna  ↻";
-                if (GUI.Button(mainActBtn, actTxt, badgeStyle))
-                {
-                    if (IsLevelCompleted) LoadNextProgressiveLevel();
-                    else StartLevel(CurrentLevelNumber);
-                }
-
-                Rect homeSquareBtn = new Rect(box.x + mw - 84f * s, box.y + 306f * s, 56f * s, 54f * s);
-                DrawCard(homeSquareBtn, new Color(0.56f, 0.24f, 0.88f), new Color(0.85f, 0.55f, 1.00f), 2.5f * s);
-                if (GUI.Button(homeSquareBtn, "🏠", titleStyle))
-                {
-                    IsGameOver = false;
-                    IsLevelCompleted = false;
-                    CurrentScreen = JellyScreenMode.MainMenu;
-                }
-
-                // 4) Revive / Bonus x2 Button
-                Rect reviveBtn = new Rect(box.x + 28f * s, box.y + 372f * s, mw - 56f * s, 44f * s);
-                DrawCard(reviveBtn, new Color(0.42f, 0.22f, 0.78f), new Color(0.78f, 0.52f, 1.00f), 1.5f * s);
-                subStyle.normal.textColor = new Color(1.00f, 0.90f, 0.38f);
-                string revTxt = IsGameOver ? "🎬 Kalkanla Devam Et (Revive - Kütle 90)" : "🎁 Ödül x2 Bonusu Al (+500 Puan)";
-                if (GUI.Button(reviveBtn, revTxt, subStyle))
-                {
-                    if (IsGameOver)
-                    {
-                        IsGameOver = false;
-                        CurrentMass = 90f;
-                        _displayedMass = 90f;
-                        HasShield = true;
-                        _bounceCooldown = 0f;
-                        CurrentDistance = Mathf.Max(0f, CurrentDistance - 3.5f);
-                        SetBanner("🛡 DEVAM EDİLDİ (REVIVE)! Kalkan ve 90 Kütle ile koşuya devam!", 2.5f);
-                    }
-                    else
-                    {
-                        AddScoreWithCombo(500);
-                        LoadNextProgressiveLevel();
-                    }
-                }
-            }
-        }
-
-        private void DrawCompactQuestBar(Rect r, string label, int cur, int max, float s, GUIStyle subStyle)
-        {
-            DrawRect(r, new Color(0.10f, 0.07f, 0.22f, 0.90f));
-            float pct = Mathf.Clamp01(cur / (float)Mathf.Max(1, max));
-            DrawRect(new Rect(r.x, r.y, r.width * pct, r.height), new Color(0.18f, 0.88f, 0.48f, 0.75f));
-            subStyle.normal.textColor = Color.white;
-            GUI.Label(r, $"{label}   ({cur}/{max})", subStyle);
-        }
-
-        private void DrawQuestRow(Rect r, string title, int cur, int max, string rewardTxt, float s, GUIStyle badgeStyle, GUIStyle subStyle)
-        {
-            DrawCard(r, new Color(0.20f, 0.14f, 0.38f, 0.95f), new Color(0.48f, 0.36f, 0.78f, 0.85f), 1.5f * s);
-            badgeStyle.normal.textColor = Color.white;
-            GUI.Label(new Rect(r.x + 12f * s, r.y + 8f * s, r.width - 110f * s, 26f * s), title, badgeStyle);
-
-            Rect barBg = new Rect(r.x + 14f * s, r.y + 42f * s, r.width - 120f * s, 20f * s);
-            DrawRect(barBg, new Color(0.12f, 0.08f, 0.24f));
-            float pct = Mathf.Clamp01(cur / (float)Mathf.Max(1, max));
-            DrawRect(new Rect(barBg.x, barBg.y, barBg.width * pct, barBg.height), new Color(0.18f, 0.92f, 0.48f));
-            subStyle.normal.textColor = Color.white;
-            GUI.Label(barBg, $"({cur}/{max})", subStyle);
-
-            Rect rewBox = new Rect(r.x + r.width - 92f * s, r.y + 14f * s, 80f * s, 50f * s);
-            DrawCard(rewBox, cur >= max ? new Color(0.18f, 0.86f, 0.48f) : new Color(0.32f, 0.22f, 0.58f), new Color(0.75f, 0.52f, 1.00f), 1.5f * s);
-            subStyle.normal.textColor = new Color(1.00f, 0.90f, 0.32f);
-            GUI.Label(rewBox, rewardTxt, subStyle);
-        }
-
-        private bool DrawSettingToggleRow(Rect r, string label, bool state, float s, GUIStyle badgeStyle)
-        {
-            DrawCard(r, new Color(0.20f, 0.14f, 0.38f, 0.95f), new Color(0.45f, 0.35f, 0.75f, 0.80f), 1.5f * s);
-            badgeStyle.normal.textColor = Color.white;
-            GUI.Label(new Rect(r.x + 12f * s, r.y, r.width - 110f * s, r.height), label, badgeStyle);
-
-            Rect tog = new Rect(r.x + r.width - 90f * s, r.y + 10f * s, 76f * s, 32f * s);
-            DrawCard(tog, state ? new Color(0.16f, 0.88f, 0.46f) : new Color(0.32f, 0.28f, 0.46f), Color.white, 1.5f * s);
-            if (GUI.Button(tog, state ? "AÇIK" : "KAPALI", badgeStyle))
-            {
-                state = !state;
-            }
-            return state;
-        }
-
-        private void DrawWorldSpaceBadge(Vector3 worldPos, string txt, Color bgCol, float s, GUIStyle badgeStyle)
-        {
-            Vector3 sp = mainCamera.WorldToScreenPoint(worldPos);
-            if (sp.z <= 0.5f) return;
-
-            float guiY = Screen.height - sp.y;
-            float bw = Mathf.Max(220f * s, (txt.Length * 10.2f + 32f) * s);
-            float bh = 36f * s;
-            Rect br = new Rect(sp.x - bw * 0.5f, guiY - bh * 0.5f, bw, bh);
-            DrawRect(new Rect(br.x - 3f * s, br.y - 3f * s, br.width + 6f * s, br.height + 6f * s), new Color(0.05f, 0.08f, 0.14f, 0.92f));
-            DrawRect(br, bgCol);
-            badgeStyle.normal.textColor = new Color(0.06f, 0.08f, 0.14f);
-            GUI.Label(br, txt, badgeStyle);
+            _cameraFovPunch = Mathf.Lerp(_cameraFovPunch, 0f, Mathf.Clamp01(dt * 7.5f));
+            float speedFov = _speedBoostTimer > 0f ? 5.5f : 0f;
+            mainCamera.fieldOfView = Mathf.Lerp(mainCamera.fieldOfView, 49f + speedFov + _cameraFovPunch, Mathf.Clamp01(dt * 10f));
         }
     }
 }

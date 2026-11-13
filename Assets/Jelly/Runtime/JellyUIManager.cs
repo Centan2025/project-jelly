@@ -56,6 +56,7 @@ namespace Jelly
                     hudPanel.SetActive(false);
                 if (mainMenuPanel != null && mainMenuPanel.activeSelf)
                     mainMenuPanel.SetActive(false);
+                gameObject.SetActive(false);
                 return;
             }
 

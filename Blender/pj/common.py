@@ -534,6 +534,19 @@ def boolean_diff(target, cutter):
     bpy.ops.object.modifier_apply(modifier=mod.name)
     bpy.data.objects.remove(cutter, do_unlink=True)
 
+    # Fix boolean N-gon diagonal shading pinching on beveled flat walls:
+    # Weighted Normal keeps flat faces 100% planar while keeping bevels/holes smooth!
+    wn = target.modifiers.new("WeightedNormal", 'WEIGHTED_NORMAL')
+    wn.mode = 'FACE_AREA'
+    wn.weight = 100
+    wn.keep_sharp = True
+    bpy.ops.object.modifier_apply(modifier=wn.name)
+
+    es = target.modifiers.new("EdgeSplit", 'EDGE_SPLIT')
+    es.split_angle = math.radians(34.0)
+    es.use_edge_angle = True
+    bpy.ops.object.modifier_apply(modifier=es.name)
+
 
 def prism(name, pts, depth, coll, mat, plane='XZ', bevel=0.0):
     """Extruded polygon. pts are (a,b) in the chosen plane, extrusion centred."""

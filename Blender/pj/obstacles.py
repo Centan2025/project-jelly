@@ -6,7 +6,7 @@ from mathutils import Vector
 from .common import (
     C, srgb, mat_plastic, mat_neon, mat_hazard, mat_cracked_glass, mat_jelly,
     cube, sphere, cylinder, cone, torus, arch_band, prism, obstacle_pedestal,
-    model_group, label, place, boolean_diff, text, aim, tube, finish,
+    model_group, label, place, boolean_diff, text, aim, tube, finish, from_mesh,
 )
 
 
@@ -72,46 +72,79 @@ def _arrow_3d(name, loc, direction, scale, depth, coll, mat):
     return ob
 
 
+def _build_clean_hole_wall(name, width, depth, z_min, z_max, hole_z, hole_r, coll, mat, segs=48):
+    """Builds a clean quad-ring wall around a circular hole (ZERO N-gons, ZERO diagonal X-shading)."""
+    hw = width * 0.5
+    hd = depth * 0.5
+    verts = []
+    faces = []
+    # For each angle, raycast from (0, hole_z) to the outer rectangle [+-hw, z_min..z_max]
+    for i in range(segs):
+        a = (2.0 * math.pi * i) / segs
+        ca = math.cos(a)
+        sa = math.sin(a)
+        ix = hole_r * ca
+        iz = max(z_min, hole_z + hole_r * sa)
+
+        tx = (hw / abs(ca)) if abs(ca) > 1e-5 else 1e9
+        tz_hi = ((z_max - hole_z) / sa) if sa > 1e-5 else 1e9
+        tz_lo = ((z_min - hole_z) / sa) if sa < -1e-5 else 1e9
+        t = min(tx, tz_hi, tz_lo)
+        ox = max(-hw, min(hw, t * ca))
+        oz = max(z_min, min(z_max, hole_z + t * sa))
+
+        # 4 verts per slice: 0=front-inner, 1=front-outer, 2=back-outer, 3=back-inner
+        verts.append((ix, -hd, iz))
+        verts.append((ox, -hd, oz))
+        verts.append((ox, +hd, oz))
+        verts.append((ix, +hd, iz))
+
+    for i in range(segs):
+        ni = (i + 1) % segs
+        b0 = i * 4
+        b1 = ni * 4
+        faces.append((b0 + 0, b0 + 1, b1 + 1, b1 + 0))  # Front flat quad
+        faces.append((b0 + 2, b0 + 3, b1 + 3, b1 + 2))  # Back flat quad
+        faces.append((b0 + 1, b0 + 2, b1 + 2, b1 + 1))  # Outer perimeter quad
+        faces.append((b0 + 3, b0 + 0, b1 + 0, b1 + 3))  # Inner hole tunnel quad
+
+    return from_mesh(name, verts, faces, coll, mat, bevel=0.025, shade_smooth=False)
+
+
 def build_gates(coll, label_mat):
     groups = []
 
-    # ========================================================== 1. DAR GEÇİT ==
+    # ========================================================== 1. DAR GEÇİT (Toy Waterpark Coral & Sunny Gold) ==
     e = model_group("Gate_Narrow", (-10, -6, 0), coll)
-    z0 = obstacle_pedestal("Narrow", e, coll, width=6.60, depth=1.65, height=0.28)
-    wall_mat = mat_plastic("NarrowWallIndigo", srgb("#5642B8"), rough=0.25, metal=0.18, coat=0.55,
-                           emission=C["purple"], strength=0.14)
-    collar_mat = mat_plastic("NarrowCollar", srgb("#3A2888"), rough=0.24, metal=0.30, coat=0.6)
-    hole_dark = mat_plastic("HoleInteriorDark", C["dark2"], rough=0.45)
+    coral_wall = mat_plastic("NarrowWallCoral", srgb("#F66C78"), rough=0.22, metal=0.04, coat=0.45)
+    coral_pillar = mat_plastic("NarrowPillarCoral", srgb("#F05A67"), rough=0.22, metal=0.04, coat=0.45)
+    sunny_gold = mat_plastic("NarrowSunnyGold", srgb("#FFD026"), rough=0.20, metal=0.06, coat=0.50)
 
-    _fortress_buttress_frame("Narrow", e, coll, z0, wall_w=4.20, wall_h=2.18)
+    # Chunky rounded coral side pillars (taller than the top header beam, matching Alternative 1)
+    for side in (-1, 1):
+        pil = cube(f"Narrow_Buttress_{side}", (side * 2.10, 0, 1.38),
+                   (0.76, 0.86, 2.76), coll, coral_pillar, bevel=0.22)
+        place(pil, e)
 
-    # Center recessed armor wall with circular hole
-    wall = cube("Narrow_Wall", (0, 0, z0 + 1.08), (4.30, 0.68, 2.16), coll, wall_mat, bevel=0.07)
-    hole_z = z0 + 1.02
-    hole_r = 0.46
-    cutter = cylinder("Narrow_HoleCut", (0, 0, hole_z), hole_r, 1.8, coll, None,
-                      rot=(math.pi / 2, 0, 0), verts=48)
-    boolean_diff(wall, cutter)
+    # Chunky rounded sunny-yellow top header beam nestled between the coral pillars
+    header = cube("Narrow_TopHeaderGold", (0, 0, 2.18), (3.52, 0.78, 0.76), coll, sunny_gold, bevel=0.14)
+    place(header, e)
+
+    # Clean quad-ring lower coral wall with open ground-level circular tunnel (flush with floor, NO bottom step!)
+    hole_r = 0.58
+    hole_z = 0.54
+    wall = _build_clean_hole_wall("Narrow_Wall", 3.52, 0.72, 0.0, 1.80, hole_z, hole_r, coll, coral_wall, segs=48)
     place(wall, e)
 
-    # Horizontal armor seam grooves & golden rivets on the wall face
-    seam_mat = mat_plastic("NarrowSeam", C["purple_dk"], rough=0.35, metal=0.4)
-    gold_rivet = mat_plastic("NarrowRivet", C["gold"], rough=0.22, metal=0.8)
-    for sx in (-1.35, 1.35):
-        seam = cube("Narrow_PanelSeam", (sx, -0.34, hole_z), (1.30, 0.03, 0.035), coll, seam_mat, bevel=0.008)
-        place(seam, e)
-        for rz in (hole_z - 0.14, hole_z + 0.14):
-            rv = sphere("Narrow_Rivet", (sx + (0.45 if sx < 0 else -0.45), -0.35, rz),
-                        0.035, coll, gold_rivet, 14, 8)
-            place(rv, e)
-
-    # Thick bevelled circular aperture collar + dark tunnel barrel inside
-    collar = torus("Narrow_HoleCollar", (0, -0.30, hole_z), hole_r + 0.06, 0.095, coll, collar_mat,
-                   rot=(math.pi / 2, 0, 0), mseg=56, nseg=18)
-    place(collar, e)
-    barrel = cylinder("Narrow_HoleDark", (0, 0.05, hole_z), hole_r - 0.01, 0.52, coll, hole_dark,
-                      rot=(math.pi / 2, 0, 0), verts=40)
-    place(barrel, e)
+    # Chunky rounded sunny-yellow circular tunnel collar front & back + inner open yellow sleeve
+    for cy in (-0.34, 0.34):
+        collar = torus("Narrow_HoleCollar", (0, cy, hole_z), hole_r + 0.08, 0.13, coll, sunny_gold,
+                       rot=(math.pi / 2, 0, 0), mseg=56, nseg=20)
+        place(collar, e)
+    inner_sleeve = _build_clean_hole_wall("Narrow_HoleCollarSleeve", (hole_r + 0.14) * 2.0, 0.70,
+                                          0.0, hole_z + hole_r + 0.14,
+                                          hole_z, hole_r - 0.01, coll, sunny_gold, segs=48)
+    place(inner_sleeve, e)
 
     label(e, coll, "DAR GEÇİT  ·  Ø0.72-0.85 m", -1.20, 0.34, label_mat)
     finish(e, coll)

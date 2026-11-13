@@ -29,6 +29,10 @@ namespace Jelly
         private float _squashBounce;
         private float _squashBounceVel;
         private float _prevScaleY;
+        private float _squeezeTimer;
+        private float _squeezeDuration = 0.25f;
+        private float _squeezeIntensity;
+        private float _wallImpactTimer;
 
         public void InitializeWithBaseMesh(Mesh baseMesh)
         {
@@ -73,6 +77,20 @@ namespace Jelly
         public void TriggerJellyImpulse(float strength = 0.28f)
         {
             _squashBounceVel += strength * 8.5f;
+        }
+
+        public void TriggerGateSqueeze(float intensity = 0.36f, float duration = 0.28f)
+        {
+            _squeezeIntensity = Mathf.Clamp(intensity, 0.1f, 0.55f);
+            _squeezeDuration = Mathf.Max(0.12f, duration);
+            _squeezeTimer = _squeezeDuration;
+            _squashBounceVel += 3.8f;
+        }
+
+        public void TriggerWallImpact()
+        {
+            _wallImpactTimer = 0.26f;
+            _squashBounceVel -= 7.5f;
         }
 
         private void Update()
@@ -132,8 +150,27 @@ namespace Jelly
 
             float t = _idleTime;
             float idleBreathing = Mathf.Sin(t * 5.4f) * 0.044f + Mathf.Cos(t * 8.9f) * 0.022f;
-            float totalSquashY = Mathf.Clamp(_squashBounce + idleBreathing, -0.34f, 0.34f);
+
+            float squeezeCurve = 0f;
+            if (_squeezeTimer > 0f)
+            {
+                _squeezeTimer = Mathf.Max(0f, _squeezeTimer - dt);
+                float p = 1f - (_squeezeTimer / _squeezeDuration);
+                squeezeCurve = Mathf.Sin(p * Mathf.PI) * _squeezeIntensity;
+            }
+
+            float wallSquashCurve = 0f;
+            if (_wallImpactTimer > 0f)
+            {
+                _wallImpactTimer = Mathf.Max(0f, _wallImpactTimer - dt);
+                float p = 1f - (_wallImpactTimer / 0.26f);
+                wallSquashCurve = Mathf.Sin(p * Mathf.PI) * 0.38f;
+            }
+
+            float totalSquashY = Mathf.Clamp(_squashBounce + idleBreathing + squeezeCurve * 0.45f - wallSquashCurve * 0.55f, -0.40f, 0.42f);
             float volumePreserveXZ = 1f - totalSquashY * 0.54f;
+            float squeezeScaleX = volumePreserveXZ * (1f - squeezeCurve) * (1f + wallSquashCurve * 0.55f);
+            float squeezeScaleZ = volumePreserveXZ * (1f + squeezeCurve * 0.65f) * (1f - wallSquashCurve * 0.65f);
 
             const float baseBottomY = -0.33f;
             const float baseHeightY = 0.66f;
@@ -149,9 +186,9 @@ namespace Jelly
                 float crossRipple = Mathf.Cos(bv.x * 6.2f + t * 6.8f) * Mathf.Sin(bv.z * 6.2f - _rollPhase * 2.0f) * 0.026f;
                 float skirtWaveRadial = Mathf.Sin(Mathf.Atan2(bv.z, bv.x) * 4f + _rollPhase * 1.9f) * 0.032f * skirtFactor;
 
-                float radialScale = volumePreserveXZ + rollWave * (0.4f + 0.6f * h01) + skirtWaveRadial;
-                float vx = bv.x * radialScale;
-                float vz = bv.z * radialScale;
+                float waveOffset = rollWave * (0.4f + 0.6f * h01) + skirtWaveRadial;
+                float vx = bv.x * (squeezeScaleX + waveOffset);
+                float vz = bv.z * (squeezeScaleZ + waveOffset);
                 float vy = (bv.y - baseBottomY) * (1f + totalSquashY) + baseBottomY;
 
                 vx += (_lateralShear + Mathf.Sin(t * 7.2f + h01 * 3.8f) * 0.028f) * crownFactor;
